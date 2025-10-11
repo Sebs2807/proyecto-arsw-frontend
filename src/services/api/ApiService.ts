@@ -1,6 +1,7 @@
 // src/services/apiService.ts
-import axios from "axios";
-import type { AxiosRequestConfig, AxiosResponse, AxiosInstance } from "axios";
+import axios, { AxiosError } from "axios";
+import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+
 class ApiService {
   private axiosInstance: AxiosInstance;
 
@@ -16,19 +17,34 @@ class ApiService {
 
     this.axiosInstance.interceptors.response.use(
       (response) => response,
-      (error) => {
-        if (error.response?.status === 401) {
-          console.log("Sesión expirada o no autorizada");
+      async (error: AxiosError & { config?: any }) => {
+        const originalRequest = error.config;
+        if (
+          error.response?.status === 401 &&
+          originalRequest &&
+          !originalRequest._retry
+        ) {
+          originalRequest._retry = true;
+
+          try {
+            await this.axiosInstance.post("/v1/auth/refresh-token");
+
+            return this.axiosInstance(originalRequest);
+          } catch (refreshError) {
+            console.error("Refresh token inválido o expirado", refreshError);
+            return Promise.reject(refreshError);
+          }
         }
+
         return Promise.reject(error);
-      },
+      }
     );
   }
 
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response: AxiosResponse<T> = await this.axiosInstance.get(
       url,
-      config,
+      config
     );
     return response.data;
   }
@@ -36,12 +52,12 @@ class ApiService {
   async post<T>(
     url: string,
     data?: any,
-    config?: AxiosRequestConfig,
+    config?: AxiosRequestConfig
   ): Promise<T> {
     const response: AxiosResponse<T> = await this.axiosInstance.post(
       url,
       data,
-      config,
+      config
     );
     return response.data;
   }
@@ -49,12 +65,12 @@ class ApiService {
   async put<T>(
     url: string,
     data?: any,
-    config?: AxiosRequestConfig,
+    config?: AxiosRequestConfig
   ): Promise<T> {
     const response: AxiosResponse<T> = await this.axiosInstance.put(
       url,
       data,
-      config,
+      config
     );
     return response.data;
   }
@@ -62,12 +78,10 @@ class ApiService {
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response: AxiosResponse<T> = await this.axiosInstance.delete(
       url,
-      config,
+      config
     );
     return response.data;
   }
 }
 
-export const apiService = new ApiService(
-  import.meta.env.VITE_API_URL || "http://localhost:3000",
-);
+export const apiService = new ApiService(import.meta.env.VITE_API_URL);
