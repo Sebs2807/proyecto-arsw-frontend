@@ -2,6 +2,12 @@
 import axios, { AxiosError } from "axios";
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 
+export interface ApiResponse<T> {
+  status: string;
+  message: string;
+  data: T;
+}
+
 class ApiService {
   private axiosInstance: AxiosInstance;
 
@@ -11,9 +17,7 @@ class ApiService {
       withCredentials: true,
     });
 
-    this.axiosInstance.interceptors.request.use((config) => {
-      return config;
-    });
+    this.axiosInstance.interceptors.request.use((config) => config);
 
     this.axiosInstance.interceptors.response.use(
       (response) => response,
@@ -28,7 +32,6 @@ class ApiService {
 
           try {
             await this.axiosInstance.post("/v1/auth/refresh-token");
-
             return this.axiosInstance(originalRequest);
           } catch (refreshError) {
             console.error("Refresh token inválido o expirado", refreshError);
@@ -42,11 +45,9 @@ class ApiService {
   }
 
   async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response: AxiosResponse<T> = await this.axiosInstance.get(
-      url,
-      config
-    );
-    return response.data;
+    const response: AxiosResponse<ApiResponse<T>> =
+      await this.axiosInstance.get(url, config);
+    return response.data.data;
   }
 
   async post<T>(
@@ -54,12 +55,9 @@ class ApiService {
     data?: any,
     config?: AxiosRequestConfig
   ): Promise<T> {
-    const response: AxiosResponse<T> = await this.axiosInstance.post(
-      url,
-      data,
-      config
-    );
-    return response.data;
+    const response: AxiosResponse<ApiResponse<T>> =
+      await this.axiosInstance.post(url, data, config);
+    return response.data.data;
   }
 
   async put<T>(
@@ -67,20 +65,15 @@ class ApiService {
     data?: any,
     config?: AxiosRequestConfig
   ): Promise<T> {
-    const response: AxiosResponse<T> = await this.axiosInstance.put(
-      url,
-      data,
-      config
-    );
-    return response.data;
+    const response: AxiosResponse<ApiResponse<T>> =
+      await this.axiosInstance.put(url, data, config);
+    return response.data.data;
   }
 
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
-    const response: AxiosResponse<T> = await this.axiosInstance.delete(
-      url,
-      config
-    );
-    return response.data;
+    const response: AxiosResponse<ApiResponse<T>> =
+      await this.axiosInstance.delete(url, config);
+    return response.data.data;
   }
 }
 

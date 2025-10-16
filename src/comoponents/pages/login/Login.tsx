@@ -2,7 +2,7 @@ import React from "react";
 import Brain from "../../../assets/brain.svg?react";
 import { LoginCard } from "./organisms/LoginCard";
 
-const LoginPage: React.FC = () => {
+const Login: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-dark-900 p-4 relative overflow-hidden">
       <div className="absolute inset-0 "></div>
@@ -24,4 +24,4 @@ const LoginPage: React.FC = () => {
   );
 };
 
-export default LoginPage;
+export default Login;

@@ -3,10 +3,15 @@ import { useEffect } from "react";
 import { useSelector, useDispatch } from "react-redux";
 
 import { ProtectedRoute } from "./comoponents/ProtectedRoute";
-import LoginPage from "./comoponents/pages/login/LoginPage";
-import Dashboard from "./comoponents/pages/Dashboard";
-import { checkAuth } from "./store/authSlice";
+import LoginPage from "./comoponents/pages/login/Login";
+
+import { checkAuth } from "./store/slices/authSlice";
 import type { RootState, AppDispatch } from "./store";
+import MainLayout from "./comoponents/layouts/MainLayout";
+import Board from "./comoponents/pages/dashboard/Board";
+import Calendar from "./comoponents/pages/calendar/Calendar";
+import Assistant from "./comoponents/pages/assistant/Assistant";
+import Home from "./comoponents/pages/home/home";
 
 function App() {
   const dispatch = useDispatch<AppDispatch>();
@@ -19,29 +24,33 @@ function App() {
   }, [dispatch]);
 
   useEffect(() => {
-    // Only proceed once auth state has been checked
     if (!isAuthChecked) return;
-
-    // SCENARIO 1: User is authenticated
-    // If user is on / or /login, redirect to /dashboard
     if (user && (location.pathname === "/" || location.pathname === "/login")) {
-      navigate("/dashboard", { replace: true });
-      return; // Stop here after navigating
+      navigate("/home", { replace: true });
     }
   }, [isAuthChecked, user, location.pathname, navigate]);
 
+  if (!isAuthChecked) return <div>Loading...</div>;
+
   return (
     <Routes>
+      {/* Rutas públicas */}
       <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
+
       <Route
-        path="/dashboard/*"
+        path="/"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <MainLayout />
           </ProtectedRoute>
         }
-      />
+      >
+        <Route path="home" element={<Home />} />
+        <Route path="boards" element={<Board />} />
+        <Route path="calendar" element={<Calendar />} />
+        <Route path="assistant" element={<Assistant />} />
+      </Route>
     </Routes>
   );
 }

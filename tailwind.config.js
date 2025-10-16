@@ -11,6 +11,7 @@ module.exports = {
         dark: {
           900: "#0F0F2F", // fondo principal → azul muy oscuro
           800: "#1A1A3D", // cards, contenedores → morado oscuro
+          700: "#7676a3",
           600: "#2E2E5C", // bordes, texto secundario → azul grisáceo
         },
         limeyellow: {
