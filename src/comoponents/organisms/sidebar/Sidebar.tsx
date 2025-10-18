@@ -10,6 +10,7 @@ import HomeSidebar from "./HomeSidebar";
 import SynapseButton from "../../atoms/SynapseButton";
 import { setSection } from "../../../store/slices/sidebarSlice";
 import type { RootState, AppDispatch } from "../../../store";
+import BoardsSidebar from "./BoardsSidebar";
 
 const Sidebar: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -39,7 +40,7 @@ const Sidebar: React.FC = () => {
     {
       id: "columns",
       icon: <Columns className="h-4 w-4 inline-block" />,
-      sideMenuComponent: null,
+      sideMenuComponent: selectedWorkspace ? <BoardsSidebar /> : null,
       navigationPath: "/boards",
       text: "Tableros",
     },
