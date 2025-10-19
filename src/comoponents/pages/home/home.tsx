@@ -43,6 +43,14 @@ const Home: React.FC = () => {
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
+  // Estados del formulario
+  const [formData, setFormData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+
   const CONFIG = {
     members: {
       endpoint: "/v1/users/paginated",
@@ -63,7 +71,7 @@ const Home: React.FC = () => {
           updatedAt: new Date(m.updatedAt).toLocaleString(),
         })),
       title: "Miembros",
-      description: "Visualiza los miembros asociados al workspace.",
+      description: "Visualiza y gestiona los miembros del workspace.",
     },
     boards: {
       endpoint: "/v1/boards",
@@ -143,6 +151,44 @@ const Home: React.FC = () => {
     }
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.firstName || !formData.lastName || !formData.email) return;
+
+    try {
+      setSubmitting(true);
+      const body = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        picture: null,
+        workspaces: [],
+      };
+
+      console.debug("POST /v1/users body:", body);
+      const res = await apiService.post("/v1/users", body);
+      console.debug("Response from POST /v1/users:", res);
+      setIsModalOpen(false);
+      setFormData({ firstName: "", lastName: "", email: "" });
+      fetchData(); 
+    } catch (err) {
+      
+      if (err && (err as any).response) {
+        const r = (err as any).response;
+        console.error(`Error al crear usuario: status=${r.status} data=`, r.data);
+      } else {
+        console.error("Error al crear usuario:", err);
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full font-poppins">
       <div className="bg-dark-800 rounded-xl shadow-md p-3 mb-4 border border-dark-600">
@@ -160,13 +206,15 @@ const Home: React.FC = () => {
           {config && (
             <div className="flex items-center space-x-3">
               <div className="w-px h-12 bg-limeyellow-600 rounded-full" />
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="h-10 flex items-center justify-center gap-1 bg-limeyellow-500 hover:bg-limeyellow-600 text-white text-sm font-semibold px-2 py-2 rounded-lg transition-colors duration-200"
-              >
-                <Plus className="w-4 h-4 relative top-[0.5px]" />
-                <span className="leading-none pr-1">Añadir</span>
-              </button>
+              {activeItem === "members" && (
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="h-10 flex items-center justify-center gap-1 bg-limeyellow-500 hover:bg-limeyellow-600 text-white text-sm font-semibold px-2 py-2 rounded-lg transition-colors duration-200"
+                >
+                  <Plus className="w-4 h-4 relative top-[0.5px]" />
+                  <span className="leading-none pr-1">Añadir</span>
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -200,14 +248,63 @@ const Home: React.FC = () => {
         )}
       </div>
 
+      {/* Modal para añadir usuario */}
       <ModalBase
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={`Añadir ${config?.title?.toLowerCase() || ""}`}
+        title="Añadir nuevo miembro"
       >
-        <p className="text-text-secondary text-sm">
-          Aquí irá el formulario para añadir {config?.title?.toLowerCase()}.
-        </p>
+        <form onSubmit={handleAddMember} className="space-y-3">
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">
+              Nombre
+            </label>
+            <input
+              name="firstName"
+              type="text"
+              value={formData.firstName}
+              onChange={handleInputChange}
+              required
+              className="w-full bg-dark-700 text-white rounded-lg px-3 py-2 text-sm outline-none border border-dark-600 focus:border-limeyellow-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">
+              Apellido
+            </label>
+            <input
+              name="lastName"
+              type="text"
+              value={formData.lastName}
+              onChange={handleInputChange}
+              required
+              className="w-full bg-dark-700 text-white rounded-lg px-3 py-2 text-sm outline-none border border-dark-600 focus:border-limeyellow-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-text-secondary mb-1">
+              Correo electrónico
+            </label>
+            <input
+              name="email"
+              type="email"
+              value={formData.email}
+              onChange={handleInputChange}
+              required
+              className="w-full bg-dark-700 text-white rounded-lg px-3 py-2 text-sm outline-none border border-dark-600 focus:border-limeyellow-500"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-limeyellow-500 hover:bg-limeyellow-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors duration-200"
+          >
+            {submitting ? "Guardando..." : "Guardar"}
+          </button>
+        </form>
       </ModalBase>
     </div>
   );
