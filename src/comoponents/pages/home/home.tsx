@@ -43,7 +43,7 @@ const Home: React.FC = () => {
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
 
-  // Estados del formulario
+  // Form state
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -55,30 +55,30 @@ const Home: React.FC = () => {
     members: {
       endpoint: "/v1/users/paginated",
       columns: [
-        { key: "name", label: "Nombre" },
-        { key: "email", label: "Correo" },
-        { key: "active", label: "Estado" },
-        { key: "createdAt", label: "Creado" },
-        { key: "updatedAt", label: "Actualizado" },
+  { key: "name", label: "Name" },
+  { key: "email", label: "Email" },
+        { key: "active", label: "Status" },
+          { key: "createdAt", label: "Created" },
+          { key: "updatedAt", label: "Updated" },
       ],
       transform: (items: Member[]) =>
         items.map((m) => ({
           id: m.id,
           name: `${m.firstName} ${m.lastName}`,
           email: m.email,
-          active: m.active ? "Activo" : "Inactivo",
+          active: m.active ? "Active" : "Inactive",
           createdAt: new Date(m.createdAt).toLocaleString(),
           updatedAt: new Date(m.updatedAt).toLocaleString(),
         })),
-      title: "Miembros",
-      description: "Visualiza y gestiona los miembros del workspace.",
+  title: "Members",
+  description: "View and manage workspace members.",
     },
     boards: {
       endpoint: "/v1/boards",
       columns: [
         { key: "id", label: "ID" },
-        { key: "title", label: "Título" },
-        { key: "description", label: "Descripción" },
+  { key: "title", label: "Title" },
+  { key: "description", label: "Description" },
       ],
       transform: (items: Board[]) =>
         items.map((b) => ({
@@ -86,26 +86,26 @@ const Home: React.FC = () => {
           title: b.title,
           description: b.description || "—",
         })),
-      title: "Tableros",
-      description: "Visualiza los tableros asociados al workspace.",
+  title: "Boards",
+  description: "View the boards associated with the workspace.",
     },
     agents: {
       endpoint: "/v1/agents",
       columns: [
         { key: "id", label: "ID" },
-        { key: "name", label: "Nombre" },
-        { key: "type", label: "Tipo" },
-        { key: "status", label: "Estado" },
+  { key: "name", label: "Name" },
+  { key: "type", label: "Type" },
+  { key: "status", label: "Status" },
       ],
       transform: (items: Agent[]) =>
         items.map((a) => ({
           id: a.id,
           name: a.name,
           type: a.type,
-          status: a.status || "Activo",
+          status: a.status || "Active",
         })),
-      title: "Agentes de IA",
-      description: "Configura y supervisa los agentes inteligentes.",
+  title: "AI Agents",
+  description: "Configure and monitor AI agents.",
     },
   };
 
@@ -126,7 +126,7 @@ const Home: React.FC = () => {
       setData((prev) => (page === 1 ? transformed : [...prev, ...transformed]));
       setTotalItems(transformed.length);
     } catch (error) {
-      console.error(`Error al obtener ${activeItem}:`, error);
+      console.error(`Error fetching ${activeItem}:`, error);
       if (page === 1) setData([]);
     } finally {
       setLoading(false);
@@ -156,6 +156,88 @@ const Home: React.FC = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  // ---- Minimal user actions (delete / edit) implemented locally for members ----
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState<{ id: string; firstName: string; lastName: string; email: string } | null>(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  // delete confirmation modal state
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name?: string } | null>(null);
+
+  // Open confirmation modal (instead of browser confirm)
+  const handleDeleteUser = (id: string, name?: string) => {
+    setDeleteTarget({ id, name });
+    setIsDeleteOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await apiService.delete(`/v1/users/${deleteTarget.id}`);
+      // refresh data from backend to keep consistency
+      await fetchData();
+      setIsDeleteOpen(false);
+      setDeleteTarget(null);
+    } catch (err) {
+  console.error("Error deleting user:", err);
+  alert("Could not delete the user. Check the console for details.");
+    }
+  };
+
+  const openEditModal = (row: any) => {
+    // row has { id, name, email, ... }
+    const parts = row.name ? String(row.name).split(" ") : [];
+    const firstName = parts.length > 0 ? parts[0] : "";
+    const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
+    setEditingUser({ id: row.id, firstName, lastName, email: row.email });
+    setIsEditOpen(true);
+  };
+
+  const handleEditChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setEditingUser((prev) => (prev ? { ...prev, [name]: value } : prev));
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    try {
+      setEditSubmitting(true);
+      const payload = {
+        firstName: editingUser.firstName,
+        lastName: editingUser.lastName,
+        email: editingUser.email,
+      };
+      // Llamada real al backend
+  const updated = await apiService.patch<any>(`/v1/users/${editingUser.id}`, payload);
+
+      // If backend returns the updated user (object), use it to update the UI;
+      // otherwise, refresh the list from the backend to keep consistency.
+      if (updated && typeof updated === "object") {
+        // try to get name and email from the response
+        const newName = (updated.firstName || payload.firstName) + " " + (updated.lastName || payload.lastName);
+        const updatedAtStr = updated.updatedAt ? String(updated.updatedAt) : new Date().toLocaleString();
+        setData((prev) =>
+          prev.map((d) =>
+            d.id === editingUser.id
+              ? { ...d, name: newName.trim(), email: updated.email || payload.email, updatedAt: updatedAtStr }
+              : d
+          )
+        );
+      } else {
+        await fetchData();
+      }
+      setIsEditOpen(false);
+      setEditingUser(null);
+    } catch (err) {
+  console.error("Error updating user:", err);
+  alert("Could not update the user. Check the console for details.");
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+  // ------------------------------------------------------------------------------
+
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.firstName || !formData.lastName || !formData.email) return;
@@ -170,9 +252,9 @@ const Home: React.FC = () => {
         workspaces: [],
       };
 
-      console.debug("POST /v1/users body:", body);
-      const res = await apiService.post("/v1/users", body);
-      console.debug("Response from POST /v1/users:", res);
+  console.debug("POST /v1/users body:", body);
+  const res = await apiService.post("/v1/users", body);
+  console.debug("Response from POST /v1/users:", res);
       setIsModalOpen(false);
       setFormData({ firstName: "", lastName: "", email: "" });
       fetchData(); 
@@ -180,9 +262,9 @@ const Home: React.FC = () => {
       
       if (err && (err as any).response) {
         const r = (err as any).response;
-        console.error(`Error al crear usuario: status=${r.status} data=`, r.data);
+        console.error(`Error creating user: status=${r.status} data=`, r.data);
       } else {
-        console.error("Error al crear usuario:", err);
+        console.error("Error creating user:", err);
       }
     } finally {
       setSubmitting(false);
@@ -198,8 +280,8 @@ const Home: React.FC = () => {
               {config?.title || "🏠 Home"}
             </h1>
             <p className="text-xs text-text-secondary mt-1">
-              {config?.description ||
-                "Selecciona una opción del menú lateral para comenzar."}
+                {config?.description ||
+                "Select an option from the sidebar to get started."}
             </p>
           </div>
 
@@ -212,7 +294,7 @@ const Home: React.FC = () => {
                   className="h-10 flex items-center justify-center gap-1 bg-limeyellow-500 hover:bg-limeyellow-600 text-white text-sm font-semibold px-2 py-2 rounded-lg transition-colors duration-200"
                 >
                   <Plus className="w-4 h-4 relative top-[0.5px]" />
-                  <span className="leading-none pr-1">Añadir</span>
+                  <span className="leading-none pr-1">Add</span>
                 </button>
               )}
             </div>
@@ -226,38 +308,67 @@ const Home: React.FC = () => {
       >
         {loading && page === 1 ? (
           <div className="p-4 text-text-secondary text-center">
-            Cargando {config?.title?.toLowerCase()}...
+            Loading {config?.title?.toLowerCase()}...
           </div>
         ) : config ? (
           <>
-            <DataTable
-              data={data}
-              title={config.title}
-              columns={config.columns}
-            />
+            {activeItem === "members" ? (
+              <div className="bg-dark-800 rounded-2xl shadow-lg p-4 font-poppins">
+                <h2 className="text-xl font-semibold text-text-primary mb-4">{config.title}</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full border-collapse text-sm text-text-primary">
+                    <thead>
+                      <tr className="bg-dark-600 text-left uppercase text-xs tracking-wider">
+                        {config.columns.map((col: any) => (
+                          <th key={col.key} className="px-4 py-3 font-semibold">{col.label}</th>
+                        ))}
+                        <th className="px-4 py-3 font-semibold">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.map((row) => (
+                        <tr key={row.id} className="border-b border-dark-700 hover:bg-dark-700 transition-colors duration-150 bg-dark-900">
+                          {config.columns.map((col: any) => (
+                            <td key={col.key} className="px-4 py-3 text-text-secondary">{String(row[col.key] ?? "-")}</td>
+                          ))}
+                          <td className="px-4 py-3 text-text-secondary">
+                            <div className="flex gap-2">
+                              <button onClick={() => openEditModal(row)} className="text-xs bg-dark-700 hover:bg-limeyellow-500 text-text-secondary hover:text-dark-900 px-2 py-1 rounded">Edit</button>
+                              <button onClick={() => handleDeleteUser(row.id, row.name)} className="text-xs bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded">Delete</button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <DataTable data={data} title={config.title} columns={config.columns} />
+            )}
             {loading && (
               <div className="p-3 text-center text-text-secondary text-sm">
-                Cargando más...
+                Loading more...
               </div>
             )}
           </>
         ) : (
           <p className="mt-6 text-text-secondary text-center">
-            Selecciona una opción del menú lateral.
+            Select an option from the side menu.
           </p>
         )}
       </div>
 
-      {/* Modal para añadir usuario */}
+      {/* Modal to add user */}
       <ModalBase
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Añadir nuevo miembro"
+        title="Add new member"
       >
         <form onSubmit={handleAddMember} className="space-y-3">
           <div>
             <label className="block text-sm text-text-secondary mb-1">
-              Nombre
+              First name
             </label>
             <input
               name="firstName"
@@ -271,7 +382,7 @@ const Home: React.FC = () => {
 
           <div>
             <label className="block text-sm text-text-secondary mb-1">
-              Apellido
+              Last name
             </label>
             <input
               name="lastName"
@@ -285,7 +396,7 @@ const Home: React.FC = () => {
 
           <div>
             <label className="block text-sm text-text-secondary mb-1">
-              Correo electrónico
+              Email address
             </label>
             <input
               name="email"
@@ -302,9 +413,48 @@ const Home: React.FC = () => {
             disabled={submitting}
             className="w-full bg-limeyellow-500 hover:bg-limeyellow-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors duration-200"
           >
-            {submitting ? "Guardando..." : "Guardar"}
+            {submitting ? "Saving..." : "Save"}
           </button>
         </form>
+      </ModalBase>
+      {/* Modal to edit user (simple) */}
+      <ModalBase
+        isOpen={isEditOpen}
+        onClose={() => {
+          setIsEditOpen(false);
+          setEditingUser(null);
+        }}
+        title="Edit User"
+      >
+        {editingUser ? (
+          <form onSubmit={handleUpdateUser} className="space-y-3">
+            <div>
+              <label className="block text-sm text-text-secondary mb-1">First name</label>
+              <input name="firstName" type="text" value={editingUser.firstName} onChange={handleEditChange} required className="w-full bg-dark-700 text-white rounded-lg px-3 py-2 text-sm outline-none border border-dark-600 focus:border-limeyellow-500" />
+            </div>
+            <div>
+              <label className="block text-sm text-text-secondary mb-1">Last name</label>
+              <input name="lastName" type="text" value={editingUser.lastName} onChange={handleEditChange} required className="w-full bg-dark-700 text-white rounded-lg px-3 py-2 text-sm outline-none border border-dark-600 focus:border-limeyellow-500" />
+            </div>
+            <div>
+              <label className="block text-sm text-text-secondary mb-1">Email address</label>
+              <input name="email" type="email" value={editingUser.email} onChange={handleEditChange} required className="w-full bg-dark-700 text-white rounded-lg px-3 py-2 text-sm outline-none border border-dark-600 focus:border-limeyellow-500" />
+            </div>
+            <button type="submit" disabled={editSubmitting} className="w-full bg-limeyellow-500 hover:bg-limeyellow-600 text-white text-sm font-semibold py-2 rounded-lg transition-colors duration-200">{editSubmitting ? "Saving..." : "Save changes"}</button>
+          </form>
+        ) : (
+          <p>No user selected</p>
+        )}
+      </ModalBase>
+      {/* Confirmation modal to delete */}
+      <ModalBase isOpen={isDeleteOpen} onClose={() => setIsDeleteOpen(false)} title="Confirm deletion">
+        <div className="space-y-4">
+          <p className="text-sm text-text-secondary">Are you sure you want to delete {deleteTarget?.name ? `${deleteTarget.name}` : "this user"}? This action cannot be undone.</p>
+          <div className="flex justify-end gap-2">
+            <button onClick={() => setIsDeleteOpen(false)} className="px-3 py-2 bg-dark-700 text-text-secondary rounded">Cancel</button>
+            <button onClick={confirmDelete} className="px-3 py-2 bg-red-600 text-white rounded">Delete</button>
+          </div>
+        </div>
       </ModalBase>
     </div>
   );
