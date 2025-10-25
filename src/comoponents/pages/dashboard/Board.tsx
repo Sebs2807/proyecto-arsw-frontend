@@ -1,4 +1,5 @@
 import React from "react";
+import ReactDOM from "react-dom";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import { Trash2, Plus, Pencil } from "lucide-react";
@@ -19,6 +20,15 @@ interface List {
   cards: Task[];
 }
 
+// 🔹 Portal que renderiza el elemento arrastrado directamente en el <body>
+const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  if (typeof window === "undefined") return null;
+  const portal = document.getElementById("drag-portal");
+  return ReactDOM.createPortal(children, portal ?? document.body);
+};
+
 const Board: React.FC = () => {
   const [lists, setLists] = React.useState<List[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -37,7 +47,6 @@ const Board: React.FC = () => {
       try {
         const data = await apiService.get<List[]>("/lists");
         setLists(data);
-        // ------------------------------------------
       } catch (err) {
         console.error("Error al cargar las listas:", err);
         setError("No se pudieron cargar las listas");
@@ -48,6 +57,7 @@ const Board: React.FC = () => {
     fetchLists();
   }, []);
 
+  // 🧩 Drag and Drop
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -65,10 +75,8 @@ const Board: React.FC = () => {
 
     const newLists = [...lists];
     const [movedTask] = newLists[sourceListIndex].cards.splice(source.index, 1);
-    
     const taskWithNewListId = { ...movedTask, listId: destination.droppableId };
     newLists[destListIndex].cards.splice(destination.index, 0, taskWithNewListId);
-
     setLists(newLists);
 
     try {
@@ -80,7 +88,7 @@ const Board: React.FC = () => {
     }
   };
 
-
+  // 🧱 Crear lista
   const handleCreateList = async () => {
     if (!newListTitle.trim()) return;
     try {
@@ -88,7 +96,6 @@ const Board: React.FC = () => {
         title: newListTitle,
         order: lists.length,
       });
-      
       setLists((prev) => [...prev, { ...newList, cards: [] }]);
       setNewListTitle("");
     } catch (err) {
@@ -97,10 +104,10 @@ const Board: React.FC = () => {
     }
   };
 
+  // 🗑️ Eliminar lista
   const handleDeleteList = async (listId: string) => {
     const confirmDelete = window.confirm("¿Seguro que deseas eliminar esta lista?");
     if (!confirmDelete) return;
-
     try {
       await apiService.delete(`/lists/${listId}`);
       setLists((prev) => prev.filter((l) => l.id !== listId));
@@ -110,13 +117,13 @@ const Board: React.FC = () => {
     }
   };
 
+  // ✏️ Editar lista
   const handleEditList = async (listId: string) => {
     if (!editedTitle.trim()) return;
     try {
-      const updated = await apiService.put<List>(`/lists/${listId}`, { 
-        title: editedTitle 
+      const updated = await apiService.put<List>(`/lists/${listId}`, {
+        title: editedTitle,
       });
-      
       setLists((prev) =>
         prev.map((l) => (l.id === listId ? { ...l, title: updated.title } : l))
       );
@@ -127,7 +134,7 @@ const Board: React.FC = () => {
     }
   };
 
-
+  // ➕ Crear tarea
   const handleCreateTask = async (listId: string) => {
     if (!newTaskTitle.trim()) return;
     setIsCreating(true);
@@ -139,15 +146,11 @@ const Board: React.FC = () => {
         },
         listId,
       });
-
       setLists((prev) =>
         prev.map((list) =>
-          list.id === listId
-            ? { ...list, cards: [...list.cards, newCard] }
-            : list
+          list.id === listId ? { ...list, cards: [...list.cards, newCard] } : list
         )
       );
-
       setNewTaskTitle("");
       setNewTaskDescription("");
       setActiveListId(null);
@@ -159,10 +162,10 @@ const Board: React.FC = () => {
     }
   };
 
+  // 🗑️ Eliminar tarea
   const handleDeleteTask = async (listId: string, taskId: string) => {
     const confirmDelete = window.confirm("¿Seguro que deseas eliminar esta tarea?");
     if (!confirmDelete) return;
-
     try {
       await apiService.delete(`/cards/${taskId}`);
       setLists((prev) =>
@@ -178,16 +181,16 @@ const Board: React.FC = () => {
     }
   };
 
-
   if (loading) return <p className="text-center text-text-muted">Cargando...</p>;
   if (error) return <p className="text-center text-text-error">{error}</p>;
 
   return (
-    <div className="bg-dark-900 p-6 text-text-primary font-poppins transition-all duration-300 ease-in-out h-screen min-h-0 flex flex-col">
+    <div className="bg-dark-900 p-6 text-text-primary font-poppins h-screen flex flex-col">
       <h1 className="text-2xl font-semibold mb-6 text-text-secondary">
         Tablero CRM Dinámico
       </h1>
 
+      {/* 🔸 Crear nueva lista */}
       <div className="mb-6 flex gap-2 items-center">
         <input
           type="text"
@@ -204,53 +207,52 @@ const Board: React.FC = () => {
         </button>
       </div>
 
+      {/* 🔹 Listas con tareas */}
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex flex-row gap-6 overflow-x-auto flex-1 min-h-0 items-stretch">
+        <div className="flex flex-row gap-6 overflow-x-auto flex-1 items-stretch scrollbar-custom">
           {lists.map((list) => (
             <Droppable droppableId={list.id} key={list.id}>
               {(provided) => (
                 <div
                   ref={provided.innerRef}
                   {...provided.droppableProps}
-                  className="flex-shrink-0 min-w-[300px] max-w-[350px] h-full flex flex-col bg-dark-800 rounded-2xl border border-dark-600 p-4 shadow-md hover:shadow-[0_0_10px_rgba(79,70,229,0.25)] transform transition-all duration-300 hover:scale-[1.00]"
+                  className="flex-shrink-0 min-w-[300px] max-w-[350px] bg-dark-800 rounded-2xl border border-dark-600 p-4 flex flex-col"
                 >
-                  
-                  <div className=" flex justify-between items-center mb-4">
+                  {/* 🏷️ Encabezado lista */}
+                  <div className="flex justify-between items-center mb-4">
                     {editingListId === list.id ? (
-                      <div className="flex items-center gap-2 flex-1 animate-fade-in">
+                      <div className="flex gap-2 w-full">
                         <input
                           type="text"
                           value={editedTitle}
                           onChange={(e) => setEditedTitle(e.target.value)}
-                          className="p-2 text-sm bg-dark-900 border border-dark-600 rounded-xl text-text-primary focus:outline-none focus:ring-2 focus:ring-limeyellow-500 transition-all w-full placeholder-text-muted"
+                          className="p-2 text-sm bg-dark-900 border border-dark-600 rounded-xl text-text-primary flex-1"
                         />
                         <button
                           onClick={() => handleEditList(list.id)}
-                          className="text-sm text-limeyellow-500 hover:text-limeyellow-400 transition flex items-center gap-1"
+                          className="text-limeyellow-500 hover:text-limeyellow-400 transition text-sm"
                         >
                           Guardar
                         </button>
                       </div>
                     ) : (
                       <>
-                        <h2 className="text-lg font-semibold text-text-secondary truncate">
+                        <h2 className="text-lg font-semibold truncate">
                           {list.title} ({list.cards.length})
                         </h2>
-                        <div className="flex gap-2 items-center">
+                        <div className="flex gap-2">
                           <button
                             onClick={() => {
                               setEditingListId(list.id);
                               setEditedTitle(list.title);
                             }}
-                            title="Editar lista"
-                            className="text-text-muted hover:text-limeyellow-400 transition"
+                            className="text-text-muted hover:text-limeyellow-400"
                           >
                             <Pencil size={16} />
                           </button>
                           <button
                             onClick={() => handleDeleteList(list.id)}
-                            title="Eliminar lista"
-                            className="text-text-muted hover:text-text-error transition"
+                            className="text-text-muted hover:text-red-400"
                           >
                             <Trash2 size={16} />
                           </button>
@@ -259,67 +261,80 @@ const Board: React.FC = () => {
                     )}
                   </div>
 
-                  <div 
-                    className="flex-1 flex flex-col gap-3 overflow-y-auto pr-1" 
-                  >
+                  {/* 🧩 Tareas */}
+                  <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
                     {list.cards.map((task, index) => (
-                      <Draggable key={task.id} draggableId={task.id} index={index}>
-                        {(provided) => (
+                    <Draggable key={task.id} draggableId={task.id} index={index}>
+                      {(provided, snapshot) => {
+                        const card = (
                           <div
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className="relative bg-dark-700 text-text-primary border border-dark-600 rounded-xl p-4 hover:border-limeyellow-400 hover:shadow-[0_0_10px_rgba(79,70,229,0.4)] transition-all duration-300 cursor-pointer"
+                            className={`relative p-3 rounded-xl border text-sm select-none animate-fade-in transition-all duration-200 
+                              ${
+                              snapshot.isDragging
+                                ? "bg-dark-700 border-dark-600 shadow-[0_0_10px_2px_rgba(79,70,229,0.6)] scale-[1.02] z-[9999]"
+                                : "bg-dark-800 border-dark-600 hover:shadow-[0_0_8px_1px_rgba(79,70,229,0.4)]"
+                              }`}
                           >
-                            <h3 className="font-medium truncate">
+                            <h3 className="font-medium text-text-primary truncate">
                               {task.title}
                             </h3>
-                            <p className="text-xs text-text-muted mt-1 whitespace-normal">
+                            <p className="text-xs text-text-muted mt-1 line-clamp-2">
                               {task.description}
                             </p>
+
                             <button
                               onClick={() => handleDeleteTask(list.id, task.id)}
-                              title="Eliminar tarea"
-                              className="absolute top-2 right-2 text-text-muted hover:text-text-error hover:scale-110 transition"
+                              className="absolute top-2 right-2 text-text-muted hover:text-red-400 transition"
                             >
-                              <Trash2 size={16} />
+                              <Trash2 size={14} />
                             </button>
                           </div>
-                        )}
-                      </Draggable>
+                        );
+                        return snapshot.isDragging ? (
+                          <DragOverlayPortal>{card}</DragOverlayPortal>
+                        ) : (
+                          card
+                        );
+                      }}
+                    </Draggable>
+
                     ))}
                     {provided.placeholder}
 
+                    {/* 🆕 Crear nueva tarea */}
                     {activeListId === list.id ? (
-                      <div className="mt-3 space-y-2 animate-fade-in p-2 bg-dark-900 rounded-lg border border-dark-600 sticky bottom-0">
+                      <div className="mt-3 space-y-2 p-2 bg-dark-900 rounded-lg border border-dark-600">
                         <input
                           type="text"
                           placeholder="Título de la tarea"
                           value={newTaskTitle}
                           onChange={(e) => setNewTaskTitle(e.target.value)}
-                          className="w-full p-2 rounded-lg bg-dark-800 text-sm text-text-primary border border-dark-600 placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-limeyellow-500 transition-all"
+                          className="w-full p-2 rounded-lg bg-dark-800 text-sm text-text-primary border border-dark-600"
                         />
                         <textarea
                           placeholder="Descripción (opcional)"
                           value={newTaskDescription}
                           onChange={(e) => setNewTaskDescription(e.target.value)}
-                          className="w-full p-2 rounded-lg bg-dark-800 text-sm text-text-primary border border-dark-600 placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-limeyellow-500 transition-all"
+                          className="w-full p-2 rounded-lg bg-dark-800 text-sm text-text-primary border border-dark-600"
                         />
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleCreateTask(list.id)}
                             disabled={isCreating}
-                            className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm font-medium hover:bg-limeyellow-600 transition-all disabled:opacity-50"
+                            className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm hover:bg-limeyellow-600 disabled:opacity-50"
                           >
                             {isCreating ? "Creando..." : "Añadir"}
                           </button>
                           <button
                             onClick={() => {
-                                setActiveListId(null);
-                                setNewTaskTitle(""); 
-                                setNewTaskDescription("");
+                              setActiveListId(null);
+                              setNewTaskTitle("");
+                              setNewTaskDescription("");
                             }}
-                            className="px-3 py-1 bg-dark-600 text-text-muted rounded-lg text-sm hover:bg-dark-700 transition"
+                            className="px-3 py-1 bg-dark-600 text-text-muted rounded-lg text-sm hover:bg-dark-700"
                           >
                             Cancelar
                           </button>
@@ -328,17 +343,16 @@ const Board: React.FC = () => {
                     ) : (
                       <button
                         onClick={() => {
-                            setActiveListId(list.id);
-                            setNewTaskTitle(""); 
-                            setNewTaskDescription("");
+                          setActiveListId(list.id);
+                          setNewTaskTitle("");
+                          setNewTaskDescription("");
                         }}
-                        className="mt-4 w-full text-sm text-text-muted hover:text-text-primary transition p-2 border border-dashed border-dark-600 rounded-xl hover:border-limeyellow-500"
+                        className="mt-4 w-full text-sm text-text-muted hover:text-text-primary p-2 border border-dashed border-dark-600 rounded-xl hover:border-limeyellow-500"
                       >
                         + Añadir tarea
                       </button>
                     )}
                   </div>
-                  
                 </div>
               )}
             </Droppable>
