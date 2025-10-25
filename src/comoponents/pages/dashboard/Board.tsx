@@ -1,5 +1,6 @@
 import React from "react";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
+import type { DropResult } from "@hello-pangea/dnd";
 import { Trash2, Plus, Pencil } from "lucide-react";
 import { apiService } from "../../../services/api/ApiService";
 
@@ -24,11 +25,10 @@ const Board: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
 
   const [activeListId, setActiveListId] = React.useState<string | null>(null);
-  const [newListTitle, setNewListTitle] = React.useState("");
   const [newTaskTitle, setNewTaskTitle] = React.useState("");
   const [newTaskDescription, setNewTaskDescription] = React.useState("");
   const [isCreating, setIsCreating] = React.useState(false);
-
+  const [newListTitle, setNewListTitle] = React.useState("");
   const [editingListId, setEditingListId] = React.useState<string | null>(null);
   const [editedTitle, setEditedTitle] = React.useState("");
 
@@ -37,6 +37,7 @@ const Board: React.FC = () => {
       try {
         const data = await apiService.get<List[]>("/lists");
         setLists(data);
+        // ------------------------------------------
       } catch (err) {
         console.error("Error al cargar las listas:", err);
         setError("No se pudieron cargar las listas");
@@ -47,7 +48,7 @@ const Board: React.FC = () => {
     fetchLists();
   }, []);
 
-  const handleDragEnd = async (result: any) => {
+  const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
     if (
@@ -64,10 +65,9 @@ const Board: React.FC = () => {
 
     const newLists = [...lists];
     const [movedTask] = newLists[sourceListIndex].cards.splice(source.index, 1);
-    newLists[destListIndex].cards.splice(destination.index, 0, {
-      ...movedTask,
-      listId: destination.droppableId,
-    });
+    
+    const taskWithNewListId = { ...movedTask, listId: destination.droppableId };
+    newLists[destListIndex].cards.splice(destination.index, 0, taskWithNewListId);
 
     setLists(newLists);
 
@@ -80,6 +80,7 @@ const Board: React.FC = () => {
     }
   };
 
+
   const handleCreateList = async () => {
     if (!newListTitle.trim()) return;
     try {
@@ -87,6 +88,7 @@ const Board: React.FC = () => {
         title: newListTitle,
         order: lists.length,
       });
+      
       setLists((prev) => [...prev, { ...newList, cards: [] }]);
       setNewListTitle("");
     } catch (err) {
@@ -111,9 +113,10 @@ const Board: React.FC = () => {
   const handleEditList = async (listId: string) => {
     if (!editedTitle.trim()) return;
     try {
-      const updated = await apiService.put<List>(`/lists/${listId}`, {
-        title: editedTitle,
+      const updated = await apiService.put<List>(`/lists/${listId}`, { 
+        title: editedTitle 
       });
+      
       setLists((prev) =>
         prev.map((l) => (l.id === listId ? { ...l, title: updated.title } : l))
       );
@@ -123,6 +126,7 @@ const Board: React.FC = () => {
       alert("No se pudo actualizar la lista");
     }
   };
+
 
   const handleCreateTask = async (listId: string) => {
     if (!newTaskTitle.trim()) return;
@@ -149,6 +153,7 @@ const Board: React.FC = () => {
       setActiveListId(null);
     } catch (err) {
       console.error("Error al crear tarea:", err);
+      alert("Error al crear la tarea");
     } finally {
       setIsCreating(false);
     }
@@ -169,14 +174,16 @@ const Board: React.FC = () => {
       );
     } catch (err) {
       console.error("Error al eliminar tarea:", err);
+      alert("Error al eliminar la tarea");
     }
   };
+
 
   if (loading) return <p className="text-center text-text-muted">Cargando...</p>;
   if (error) return <p className="text-center text-text-error">{error}</p>;
 
   return (
-    <div className="bg-dark-900 min-h-screen p-6 text-text-primary font-poppins transition-all duration-300 ease-in-out">
+    <div className="bg-dark-900 p-6 text-text-primary font-poppins transition-all duration-300 ease-in-out h-screen min-h-0 flex flex-col">
       <h1 className="text-2xl font-semibold mb-6 text-text-secondary">
         Tablero CRM Dinámico
       </h1>
@@ -198,35 +205,36 @@ const Board: React.FC = () => {
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex flex-col md:flex-row gap-6 overflow-x-auto scrollbar-hide">
+        <div className="flex flex-row gap-6 overflow-x-auto flex-1 min-h-0 items-stretch">
           {lists.map((list) => (
             <Droppable droppableId={list.id} key={list.id}>
               {(provided) => (
                 <div
                   ref={provided.innerRef}
                   {...provided.droppableProps}
-                  className="flex-1 min-w-[280px] bg-dark-800 rounded-2xl border border-dark-600 p-4 shadow-md hover:shadow-[0_0_10px_rgba(79,70,229,0.25)] transform transition-all duration-300 hover:scale-[1.02]"
+                  className="flex-shrink-0 min-w-[300px] max-w-[350px] h-full flex flex-col bg-dark-800 rounded-2xl border border-dark-600 p-4 shadow-md hover:shadow-[0_0_10px_rgba(79,70,229,0.25)] transform transition-all duration-300 hover:scale-[1.00]"
                 >
-                  <div className="flex justify-between items-center mb-4">
+                  
+                  <div className=" flex justify-between items-center mb-4">
                     {editingListId === list.id ? (
-                        <div className="flex items-center gap-2 flex-1 animate-fade-in">
-                          <input
-                            type="text"
-                            value={editedTitle}
-                            onChange={(e) => setEditedTitle(e.target.value)}
-                            className="p-2 text-sm bg-dark-900 border border-dark-600 rounded-xl text-text-primary focus:outline-none focus:ring-2 focus:ring-limeyellow-500 transition-all w-full placeholder-text-muted"
-                          />
-                          <button
-                            onClick={() => handleEditList(list.id)}
-                            className="text-sm text-text-muted hover:text-text-primary transition flex items-center gap-1"
-                          >
-                            Guardar
-                          </button>
-                        </div>
+                      <div className="flex items-center gap-2 flex-1 animate-fade-in">
+                        <input
+                          type="text"
+                          value={editedTitle}
+                          onChange={(e) => setEditedTitle(e.target.value)}
+                          className="p-2 text-sm bg-dark-900 border border-dark-600 rounded-xl text-text-primary focus:outline-none focus:ring-2 focus:ring-limeyellow-500 transition-all w-full placeholder-text-muted"
+                        />
+                        <button
+                          onClick={() => handleEditList(list.id)}
+                          className="text-sm text-limeyellow-500 hover:text-limeyellow-400 transition flex items-center gap-1"
+                        >
+                          Guardar
+                        </button>
+                      </div>
                     ) : (
                       <>
                         <h2 className="text-lg font-semibold text-text-secondary truncate">
-                          {list.title}
+                          {list.title} ({list.cards.length})
                         </h2>
                         <div className="flex gap-2 items-center">
                           <button
@@ -251,8 +259,9 @@ const Board: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Tareas */}
-                  <div className="flex flex-col gap-3">
+                  <div 
+                    className="flex-1 flex flex-col gap-3 overflow-y-auto pr-1" 
+                  >
                     {list.cards.map((task, index) => (
                       <Draggable key={task.id} draggableId={task.id} index={index}>
                         {(provided) => (
@@ -260,20 +269,20 @@ const Board: React.FC = () => {
                             ref={provided.innerRef}
                             {...provided.draggableProps}
                             {...provided.dragHandleProps}
-                            className="relative bg-limeyellow-100 border border-dark-600 rounded-xl p-4 hover:border-limeyellow-400 hover:shadow-[0_0_10px_rgba(79,70,229,0.4)] transition-all duration-300 cursor-pointer transform hover:scale-[1.03]"
+                            className="relative bg-dark-700 text-text-primary border border-dark-600 rounded-xl p-4 hover:border-limeyellow-400 hover:shadow-[0_0_10px_rgba(79,70,229,0.4)] transition-all duration-300 cursor-pointer"
                           >
-                            <h3 className="text-text-primary font-medium">
+                            <h3 className="font-medium truncate">
                               {task.title}
                             </h3>
-                            <p className="text-sm text-text-muted mt-1">
+                            <p className="text-xs text-text-muted mt-1 whitespace-normal">
                               {task.description}
                             </p>
                             <button
                               onClick={() => handleDeleteTask(list.id, task.id)}
                               title="Eliminar tarea"
-                              className="absolute bottom-2 right-2 text-text-primary hover:text-text-error hover:scale-110 transition"
+                              className="absolute top-2 right-2 text-text-muted hover:text-text-error hover:scale-110 transition"
                             >
-                              <Trash2 size={18} />
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         )}
@@ -281,9 +290,8 @@ const Board: React.FC = () => {
                     ))}
                     {provided.placeholder}
 
-                    {/* Nueva tarea */}
                     {activeListId === list.id ? (
-                      <div className="mt-3 space-y-2 animate-fade-in">
+                      <div className="mt-3 space-y-2 animate-fade-in p-2 bg-dark-900 rounded-lg border border-dark-600 sticky bottom-0">
                         <input
                           type="text"
                           placeholder="Título de la tarea"
@@ -301,12 +309,16 @@ const Board: React.FC = () => {
                           <button
                             onClick={() => handleCreateTask(list.id)}
                             disabled={isCreating}
-                            className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm font-medium hover:bg-limeyellow-600 transition-all"
+                            className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm font-medium hover:bg-limeyellow-600 transition-all disabled:opacity-50"
                           >
                             {isCreating ? "Creando..." : "Añadir"}
                           </button>
                           <button
-                            onClick={() => setActiveListId(null)}
+                            onClick={() => {
+                                setActiveListId(null);
+                                setNewTaskTitle(""); 
+                                setNewTaskDescription("");
+                            }}
                             className="px-3 py-1 bg-dark-600 text-text-muted rounded-lg text-sm hover:bg-dark-700 transition"
                           >
                             Cancelar
@@ -315,13 +327,18 @@ const Board: React.FC = () => {
                       </div>
                     ) : (
                       <button
-                        onClick={() => setActiveListId(list.id)}
-                        className="mt-4 w-full text-sm text-text-muted hover:text-text-primary transition"
+                        onClick={() => {
+                            setActiveListId(list.id);
+                            setNewTaskTitle(""); 
+                            setNewTaskDescription("");
+                        }}
+                        className="mt-4 w-full text-sm text-text-muted hover:text-text-primary transition p-2 border border-dashed border-dark-600 rounded-xl hover:border-limeyellow-500"
                       >
                         + Añadir tarea
                       </button>
                     )}
                   </div>
+                  
                 </div>
               )}
             </Droppable>
