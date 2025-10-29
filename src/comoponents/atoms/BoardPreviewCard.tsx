@@ -3,13 +3,13 @@ import React from "react";
 interface BoardPreviewCardProps {
   title: string;
   isActive?: boolean;
-  color?: string; // 👈 color opcional
+  color?: string;
 }
 
 const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
   title,
   isActive = false,
-  color = "#1A1A3D", // 👈 color por defecto: card oscuro
+  color = "#1A1A3D",
 }) => {
   return (
     <div
@@ -26,10 +26,7 @@ const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
         backgroundColor: color,
       }}
     >
-      {/* Capa de sombreado sutil */}
       <div className="absolute inset-0 bg-black/20 pointer-events-none"></div>
-
-      {/* Texto en esquina inferior derecha */}
       <div
         className={`absolute bottom-2 right-3 text-text-primary text-sm font-poppins font-medium tracking-wide z-10 drop-shadow-md transition-all ${
           isActive
@@ -39,13 +36,9 @@ const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
       >
         {title}
       </div>
-
-      {/* Borde animado azul eléctrico */}
       {isActive && (
         <div className="absolute inset-0 rounded-xl border-[2px] border-limeyellow-500 animate-pulse pointer-events-none"></div>
       )}
-
-      {/* Sombra interior sutil */}
       <div className="absolute inset-0 pointer-events-none shadow-inner shadow-black/40"></div>
     </div>
   );
