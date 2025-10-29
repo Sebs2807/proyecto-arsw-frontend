@@ -103,7 +103,6 @@ const WeeklyCalendar: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-[80px_repeat(7,1fr)] border-t border-l border-dark-600 text-sm max-h-[600px] overflow-y-auto scrollbar-hide">
-        {/* Encabezado */}
         <div className="bg-dark-800 border-r border-dark-600 p-2 text-text-muted text-center font-semibold">
           Hora
         </div>
@@ -116,15 +115,12 @@ const WeeklyCalendar: React.FC = () => {
           </div>
         ))}
 
-        {/* Celdas */}
         {hours.map((hour) => (
           <React.Fragment key={hour}>
-            {/* Columna hora */}
             <div className="bg-dark-900 border-r border-t border-dark-600 text-text-muted p-2 text-right pr-4">
               {format(setHours(new Date(), hour), "h a")}
             </div>
 
-            {/* Celdas por día */}
             {daysOfWeek.map((day, i) => {
               const event = events.find(
                 (e) =>
