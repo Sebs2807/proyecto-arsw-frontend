@@ -21,7 +21,11 @@ export default defineConfig({
   plugins: [react(), svgr()],
   server: {
     https: httpsOptions,
-    host: true,
+    host: "0.0.0.0",
     port: 5173,
+    hmr: {
+      protocol: "wss",
+      host: "was-traffic-maximize-spouse.trycloudflare.com",
+    },
   },
 });
