@@ -57,7 +57,6 @@ const Board: React.FC = () => {
     fetchLists();
   }, []);
 
-  // 🧩 Drag and Drop
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -88,7 +87,6 @@ const Board: React.FC = () => {
     }
   };
 
-  // 🧱 Crear lista
   const handleCreateList = async () => {
     if (!newListTitle.trim()) return;
     try {
@@ -104,7 +102,6 @@ const Board: React.FC = () => {
     }
   };
 
-  // 🗑️ Eliminar lista
   const handleDeleteList = async (listId: string) => {
     const confirmDelete = window.confirm("¿Seguro que deseas eliminar esta lista?");
     if (!confirmDelete) return;
@@ -117,7 +114,6 @@ const Board: React.FC = () => {
     }
   };
 
-  // ✏️ Editar lista
   const handleEditList = async (listId: string) => {
     if (!editedTitle.trim()) return;
     try {
@@ -134,7 +130,6 @@ const Board: React.FC = () => {
     }
   };
 
-  // ➕ Crear tarea
   const handleCreateTask = async (listId: string) => {
     if (!newTaskTitle.trim()) return;
     setIsCreating(true);
@@ -162,7 +157,6 @@ const Board: React.FC = () => {
     }
   };
 
-  // 🗑️ Eliminar tarea
   const handleDeleteTask = async (listId: string, taskId: string) => {
     const confirmDelete = window.confirm("¿Seguro que deseas eliminar esta tarea?");
     if (!confirmDelete) return;
@@ -190,7 +184,6 @@ const Board: React.FC = () => {
         Tablero CRM Dinámico
       </h1>
 
-      {/* 🔸 Crear nueva lista */}
       <div className="mb-6 flex gap-2 items-center">
         <input
           type="text"
@@ -207,7 +200,6 @@ const Board: React.FC = () => {
         </button>
       </div>
 
-      {/* 🔹 Listas con tareas */}
       <DragDropContext onDragEnd={handleDragEnd}>
         <div className="flex flex-row gap-6 overflow-x-auto flex-1 items-stretch scrollbar-custom">
           {lists.map((list) => (
@@ -218,7 +210,6 @@ const Board: React.FC = () => {
                   {...provided.droppableProps}
                   className="flex-shrink-0 min-w-[300px] max-w-[350px] bg-dark-800 rounded-2xl border border-dark-600 p-4 flex flex-col"
                 >
-                  {/* 🏷️ Encabezado lista */}
                   <div className="flex justify-between items-center mb-4">
                     {editingListId === list.id ? (
                       <div className="flex gap-2 w-full">
@@ -261,7 +252,6 @@ const Board: React.FC = () => {
                     )}
                   </div>
 
-                  {/* 🧩 Tareas */}
                   <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
                     {list.cards.map((task, index) => (
                     <Draggable key={task.id} draggableId={task.id} index={index}>
@@ -304,7 +294,6 @@ const Board: React.FC = () => {
                     ))}
                     {provided.placeholder}
 
-                    {/* 🆕 Crear nueva tarea */}
                     {activeListId === list.id ? (
                       <div className="mt-3 space-y-2 p-2 bg-dark-900 rounded-lg border border-dark-600">
                         <input
