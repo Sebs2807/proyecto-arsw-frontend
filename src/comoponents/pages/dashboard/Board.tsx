@@ -79,7 +79,7 @@ const Board: React.FC = () => {
     setLists(newLists);
 
     try {
-      await apiService.put(`/cards/${draggableId}`, {
+      await apiService.put(`/v1/cards/${draggableId}`, {
         listId: destination.droppableId,
       });
     } catch (err) {
@@ -134,7 +134,7 @@ const Board: React.FC = () => {
     if (!newTaskTitle.trim()) return;
     setIsCreating(true);
     try {
-      const newCard = await apiService.post<Task>("/cards", {
+      const newCard = await apiService.post<Task>("/v1/cards", {
         cardData: {
           title: newTaskTitle,
           description: newTaskDescription || "Sin descripción",
@@ -161,7 +161,7 @@ const Board: React.FC = () => {
     const confirmDelete = window.confirm("¿Seguro que deseas eliminar esta tarea?");
     if (!confirmDelete) return;
     try {
-      await apiService.delete(`/cards/${taskId}`);
+      await apiService.delete(`/v1/cards/${taskId}`);
       setLists((prev) =>
         prev.map((list) =>
           list.id === listId

@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import BoardPreviewCard from "../../atoms/BoardPreviewCard";
-import SearchInput from "../../atoms/SearchInput";
 import ModalBase from "../../atoms/ModalBase";
-import { Plus, Check } from "lucide-react";
 import { apiService } from "../../../services/api/ApiService";
+import { useSelector } from "react-redux";
+import { HexColorPicker } from "react-colorful";
+import type { RootState } from "../../../store";
 
 interface Board {
   id: string;
@@ -28,64 +29,68 @@ const stringToColor = (s: string) => {
   return COLOR_PALETTE[idx];
 };
 
-const LIMIT = 10; // cantidad de tableros por carga
+const LIMIT = 10;
 
 const BoardsSidebar: React.FC = () => {
   const [boards, setBoards] = useState<Board[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [loading, setLoading] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(1);
 
   const observer = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const scrollContainerRef = useRef<HTMLDivElement | null>(null); // <-- nuevo
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const { selectedWorkspace } = useSelector((state: RootState) => state.workspace);
+  const WORKSPACE_ID = selectedWorkspace?.id;
 
-  const fetchBoards = useCallback(async (offset = 0) => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await apiService.get<Board[]>(
-        `/v1/boards?offset=${offset}&limit=${LIMIT}`
-      );
-      if (Array.isArray(data)) {
-        if (offset === 0) {
-          setBoards(data);
+  const fetchBoards = useCallback(
+    async (pageNumber = 1) => {
+      if (!WORKSPACE_ID) return;
+      try {
+        setLoading(true);
+        setError(null);
+
+        const data = await apiService.get<{ items: Board[]; total?: number }>(
+          `/v1/boards/paginated?page=${pageNumber}&limit=${LIMIT}&workspaceId=${WORKSPACE_ID}`
+        );
+
+        const boardsData = Array.isArray(data)
+          ? data
+          : (data?.items ?? []);
+
+        if (pageNumber === 1) {
+          setBoards(boardsData);
         } else {
-          setBoards((prev) => [...prev, ...data]);
+          setBoards((prev) => [...prev, ...boardsData]);
         }
-        setHasMore(data.length === LIMIT);
-      } else {
+
+        setHasMore(boardsData.length === LIMIT);
+      } catch (err) {
+        console.error("Error fetching boards:", err);
         setError("No se pudieron cargar los tableros");
         setHasMore(false);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      console.error("Error fetching boards:", err);
-      setError("No se pudieron cargar los tableros");
-      setHasMore(false);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [WORKSPACE_ID]
+  );
 
-  // carga inicial
   useEffect(() => {
-    fetchBoards(0);
+    fetchBoards(1);
   }, [fetchBoards]);
 
-  // Scroll infinito (observer usa el contenedor scrollable como root)
   useEffect(() => {
     const sentinel = loadMoreRef.current;
     const rootEl = scrollContainerRef.current;
-
     if (!sentinel || !rootEl) return;
 
-    // desconectar si hay uno previo
     if (observer.current) observer.current.disconnect();
 
     observer.current = new IntersectionObserver(
@@ -94,23 +99,20 @@ const BoardsSidebar: React.FC = () => {
         if (entry.isIntersecting && hasMore && !loading) {
           setPage((prevPage) => {
             const nextPage = prevPage + 1;
-            fetchBoards(nextPage * LIMIT);
+            fetchBoards(nextPage);
             return nextPage;
           });
         }
       },
       {
-        root: rootEl, // IMPORTANT: observar respecto del contenedor de scroll
+        root: rootEl,
         rootMargin: "150px",
         threshold: 0.1,
       }
     );
 
     observer.current.observe(sentinel);
-
-    return () => {
-      observer.current?.disconnect();
-    };
+    return () => observer.current?.disconnect();
   }, [loading, hasMore, fetchBoards]);
 
   const handleCreate = async (e?: React.FormEvent) => {
@@ -120,23 +122,21 @@ const BoardsSidebar: React.FC = () => {
       setCreating(true);
       const payload = {
         title: title.trim(),
-        description: description.trim() || null,
+        description: description.trim() || undefined,
+        workspaceId: WORKSPACE_ID,
         color: selectedColor,
-        members: [],
+        memberIds: [],
       };
       await apiService.post<Board>("/v1/boards", payload);
 
-      // cerrar modal y resetear estado
       setIsCreateOpen(false);
       setTitle("");
       setDescription("");
       setSelectedColor(COLOR_PALETTE[0]);
 
-      // refrescar lista desde 0
-      setPage(0);
+      setPage(1);
       setHasMore(true);
-      await fetchBoards(0);
-      // opcional: scrollear al top del contenedor
+      await fetchBoards(1);
       if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
     } catch (err) {
       console.error("Error creating board:", err);
@@ -170,15 +170,24 @@ const BoardsSidebar: React.FC = () => {
           />
         ))}
 
+        {loading && (
+          <p className="text-sm text-text-secondary text-center">Cargando...</p>
+        )}
+
+        {error && (
+          <p className="text-sm text-red-400 text-center">{error}</p>
+        )}
+
         <div ref={loadMoreRef} className="h-10" />
       </div>
 
+      {/* Modal de creación */}
       <ModalBase
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         title="Crear tablero"
       >
-        <form onSubmit={handleCreate} className="space-y-3">
+        <form onSubmit={handleCreate} className="space-y-4">
           <div>
             <label className="block text-sm text-text-secondary mb-1">Título</label>
             <input
@@ -203,22 +212,12 @@ const BoardsSidebar: React.FC = () => {
 
           <div>
             <label className="block text-sm text-text-secondary mb-2">Color del tablero</label>
-            <div className="flex gap-2 flex-wrap">
-              {COLOR_PALETTE.map((color) => (
-                <button
-                  key={color}
-                  type="button"
-                  onClick={() => setSelectedColor(color)}
-                  className={`w-7 h-7 rounded-full border-2 flex items-center justify-center transition ${
-                    selectedColor === color
-                      ? "border-limeyellow-500 scale-110"
-                      : "border-transparent hover:scale-105"
-                  }`}
-                  style={{ backgroundColor: color }}
-                >
-                  {selectedColor === color && <Check size={14} className="text-dark-900" />}
-                </button>
-              ))}
+            <div className="flex flex-col items-center gap-3">
+              <HexColorPicker color={selectedColor} onChange={setSelectedColor} />
+              <div
+                className="w-10 h-10 rounded-full border-2 border-dark-600"
+                style={{ backgroundColor: selectedColor }}
+              />
             </div>
           </div>
 
