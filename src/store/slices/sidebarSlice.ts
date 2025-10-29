@@ -4,7 +4,7 @@ import type { PayloadAction } from "@reduxjs/toolkit";
 
 export interface SidebarState {
   isOpen: boolean;
-  section: string; // <-- aquí se guarda la sección activa
+  section: string;
   activeItem: string;
 }
 
