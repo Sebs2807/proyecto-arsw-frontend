@@ -4,6 +4,14 @@ import { useSelector } from "react-redux";
 import type { RootState } from "../../store";
 import { apiService } from "../../services/api/ApiService";
 
+interface BoardsResponse {
+  items: Board[];
+  limit: number;
+  page: number;
+  total: number;
+  totalPages: number;
+}
+
 interface Board {
   id: string;
   title: string;
@@ -46,12 +54,14 @@ const BoardPicker: React.FC<{
       params.append("workspaceId", workspaceId);
       if (boardSearchTerm.trim()) params.append("search", boardSearchTerm);
 
-      const response = await apiService.get(`/v1/boards/paginated?${params}`, {
-        withCredentials: true,
-      });
+      const response: BoardsResponse = await apiService.get(
+        `/v1/boards/paginated?${params}`,
+        {
+          withCredentials: true,
+        }
+      );
 
-      const res = response as { data?: Board[]; boards?: Board[] };
-      const boardsData = res.data || res.boards || [];
+      const boardsData = response.items;
       setBoards(boardsData);
     } catch (err) {
       console.error("Error fetching boards:", err);
@@ -128,29 +138,49 @@ const BoardPicker: React.FC<{
             <div className="px-3 py-2 text-text-secondary text-xs">
               Loading...
             </div>
-          ) : boards.length > 0 ? (
-            boards.map((board) => (
+          ) : (
+            <>
               <div
-                key={board.id}
                 onMouseDown={() => {
-                  setSelectedBoardId(board.id);
-                  setBoardSearchTerm(board.title);
+                  setSelectedBoardId(null);
+                  setBoardSearchTerm("");
                   setIsDropdownOpen(false);
                   handleApplyFilters();
                 }}
                 className={`px-3 py-2 cursor-pointer transition-colors text-sm ${
-                  selectedBoardId === board.id
+                  selectedBoardId === null
                     ? "bg-limeyellow-500 text-white"
                     : "hover:bg-limeyellow-500 hover:text-white text-text-primary"
                 }`}
               >
-                {board.title}
+                All Boards
               </div>
-            ))
-          ) : (
-            <div className="px-3 py-2 text-text-secondary text-xs">
-              No boards found
-            </div>
+
+              {boards.length > 0 ? (
+                boards.map((board) => (
+                  <div
+                    key={board.id}
+                    onMouseDown={() => {
+                      setSelectedBoardId(board.id);
+                      setBoardSearchTerm(board.title);
+                      setIsDropdownOpen(false);
+                      handleApplyFilters();
+                    }}
+                    className={`px-3 py-2 cursor-pointer transition-colors text-sm ${
+                      selectedBoardId === board.id
+                        ? "bg-limeyellow-500 text-white"
+                        : "hover:bg-limeyellow-500 hover:text-white text-text-primary"
+                    }`}
+                  >
+                    {board.title}
+                  </div>
+                ))
+              ) : (
+                <div className="px-3 py-2 text-text-secondary text-xs">
+                  No boards found
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

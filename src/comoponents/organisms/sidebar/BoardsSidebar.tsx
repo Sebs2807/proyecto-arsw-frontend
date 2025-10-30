@@ -36,21 +36,25 @@ const BoardsSidebar: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedColor, setSelectedColor] = useState(COLOR_PALETTE[0]);
-  const [page, setPage] = useState(1);
 
   const observer = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const { selectedWorkspace } = useSelector((state: RootState) => state.workspace);
+
+  const { selectedWorkspace } = useSelector(
+    (state: RootState) => state.workspace
+  );
   const WORKSPACE_ID = selectedWorkspace?.id;
 
+  // Función de fetch de boards
   const fetchBoards = useCallback(
-    async (pageNumber = 1) => {
+    async (pageNumber = 1, replace = false) => {
       if (!WORKSPACE_ID) return;
       try {
         setLoading(true);
@@ -60,11 +64,9 @@ const BoardsSidebar: React.FC = () => {
           `/v1/boards/paginated?page=${pageNumber}&limit=${LIMIT}&workspaceId=${WORKSPACE_ID}`
         );
 
-        const boardsData = Array.isArray(data)
-          ? data
-          : (data?.items ?? []);
+        const boardsData = Array.isArray(data) ? data : data?.items ?? [];
 
-        if (pageNumber === 1) {
+        if (replace) {
           setBoards(boardsData);
         } else {
           setBoards((prev) => [...prev, ...boardsData]);
@@ -82,10 +84,12 @@ const BoardsSidebar: React.FC = () => {
     [WORKSPACE_ID]
   );
 
+  // Carga inicial
   useEffect(() => {
-    fetchBoards(1);
+    fetchBoards(1, true);
   }, [fetchBoards]);
 
+  // IntersectionObserver para paginación infinita
   useEffect(() => {
     const sentinel = loadMoreRef.current;
     const rootEl = scrollContainerRef.current;
@@ -97,11 +101,8 @@ const BoardsSidebar: React.FC = () => {
       (entries) => {
         const entry = entries[0];
         if (entry.isIntersecting && hasMore && !loading) {
-          setPage((prevPage) => {
-            const nextPage = prevPage + 1;
-            fetchBoards(nextPage);
-            return nextPage;
-          });
+          const nextPage = Math.floor(boards.length / LIMIT) + 1;
+          fetchBoards(nextPage);
         }
       },
       {
@@ -113,11 +114,13 @@ const BoardsSidebar: React.FC = () => {
 
     observer.current.observe(sentinel);
     return () => observer.current?.disconnect();
-  }, [loading, hasMore, fetchBoards]);
+  }, [boards, hasMore, loading, fetchBoards]);
 
+  // Crear tablero
   const handleCreate = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!title.trim()) return;
+
     try {
       setCreating(true);
       const payload = {
@@ -134,9 +137,8 @@ const BoardsSidebar: React.FC = () => {
       setDescription("");
       setSelectedColor(COLOR_PALETTE[0]);
 
-      setPage(1);
-      setHasMore(true);
-      await fetchBoards(1);
+      // Re-fetch boards desde la página 1
+      await fetchBoards(1, true);
       if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0;
     } catch (err) {
       console.error("Error creating board:", err);
@@ -174,9 +176,7 @@ const BoardsSidebar: React.FC = () => {
           <p className="text-sm text-text-secondary text-center">Cargando...</p>
         )}
 
-        {error && (
-          <p className="text-sm text-red-400 text-center">{error}</p>
-        )}
+        {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 
         <div ref={loadMoreRef} className="h-10" />
       </div>
@@ -189,7 +189,9 @@ const BoardsSidebar: React.FC = () => {
       >
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
-            <label className="block text-sm text-text-secondary mb-1">Título</label>
+            <label className="block text-sm text-text-secondary mb-1">
+              Título
+            </label>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -211,9 +213,14 @@ const BoardsSidebar: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-sm text-text-secondary mb-2">Color del tablero</label>
+            <label className="block text-sm text-text-secondary mb-2">
+              Color del tablero
+            </label>
             <div className="flex flex-col items-center gap-3">
-              <HexColorPicker color={selectedColor} onChange={setSelectedColor} />
+              <HexColorPicker
+                color={selectedColor}
+                onChange={setSelectedColor}
+              />
               <div
                 className="w-10 h-10 rounded-full border-2 border-dark-600"
                 style={{ backgroundColor: selectedColor }}
