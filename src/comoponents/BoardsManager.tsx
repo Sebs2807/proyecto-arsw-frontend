@@ -15,6 +15,7 @@ import ChevronLeftIcon from "../assets/chevron-left.svg?react";
 import ChevronRightIcon from "../assets/chevron-right.svg?react";
 import ChevronDownIcon from "../assets/chevron-down.svg?react";
 import ChevronUpIcon from "../assets/chevron-up.svg?react";
+import BoardsModal from "./organisms/modals/boardsModal";
 //import BoardModal from "./organisms/modals/boardModal"; // Modal similar al de members
 
 interface Board {
@@ -403,13 +404,13 @@ const BoardsManager: React.FC = () => {
         )}
       </div>
 
-      {/* <BoardModal
+      <BoardsModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchData}
         board={modalBoard}
         mode={modalMode}
-      /> */}
+      />
     </div>
   );
 };
