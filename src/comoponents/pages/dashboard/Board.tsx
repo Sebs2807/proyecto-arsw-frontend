@@ -4,6 +4,7 @@ import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
 import { Trash2, Plus, Pencil } from "lucide-react";
 import { apiService } from "../../../services/api/ApiService";
+import { io, Socket } from "socket.io-client";
 
 interface Task {
   id: string;
@@ -20,7 +21,6 @@ interface List {
   cards: Task[];
 }
 
-// 🔹 Portal que renderiza el elemento arrastrado directamente en el <body>
 const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -33,13 +33,14 @@ const Board: React.FC = () => {
   const [lists, setLists] = React.useState<List[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
-
   const [activeListId, setActiveListId] = React.useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = React.useState("");
   const [newTaskDescription, setNewTaskDescription] = React.useState("");
   const [isCreating, setIsCreating] = React.useState(false);
   const [newListTitle, setNewListTitle] = React.useState("");
-  const [editingListId, setEditingListId] = React.useState<string | null>(null);
+  const [editingListId, setEditingListId] = React.useState<string | null>(
+    null
+  );
   const [editedTitle, setEditedTitle] = React.useState("");
 
   React.useEffect(() => {
@@ -57,6 +58,101 @@ const Board: React.FC = () => {
     fetchLists();
   }, []);
 
+  React.useEffect(() => {
+    const socket: Socket = io("https://localhost:3000", {
+      transports: ["websocket"],
+      secure: true,
+      rejectUnauthorized: false,
+    });
+
+    socket.on("connect", () => console.log("🟢 Conectado a WebSocket"));
+    socket.on("disconnect", () =>
+      console.log("🔴 Desconectado de WebSocket")
+    );
+
+    socket.on("list:created", (newList: List) => {
+      setLists((prev) => {
+        const exists = prev.some((l) => l.id === newList.id);
+        if (exists) return prev;
+        return [...prev, { ...newList, cards: [] }];
+      });
+    });
+
+    socket.on("list:updated", (updatedList: List) => {
+      setLists((prev) =>
+        prev.map((l) =>
+          l.id === updatedList.id ? { ...l, ...updatedList } : l
+        )
+      );
+    });
+
+    socket.on("list:deleted", ({ id }: { id: string }) => {
+      setLists((prev) => prev.filter((l) => l.id !== id));
+    });
+
+    socket.on("card:created", ({ listId, card }) => {
+      setLists((prev) =>
+        prev.map((l) => {
+          if (l.id !== listId) return l;
+          const exists = l.cards.some((c) => c.id === card.id);
+          if (exists) return l;
+          return { ...l, cards: [...l.cards, card] };
+        })
+      );
+    });
+
+    socket.on("card:updated", ({ listId, card }) => {
+      setLists((prev) =>
+        prev.map((l) => {
+          if (l.id !== listId) return l;
+          return {
+            ...l,
+            cards: l.cards.map((c) =>
+              c.id === card.id ? { ...c, ...card } : c
+            ),
+          };
+        })
+      );
+    });
+
+    socket.on("card:deleted", ({ listId, cardId }) => {
+      setLists((prev) =>
+        prev.map((l) =>
+          l.id === listId
+            ? {
+              ...l,
+              cards: l.cards.filter((c) => c.id !== cardId),
+            }
+            : l
+        )
+      );
+    });
+
+    socket.on("card:moved", ({ sourceListId, destListId, card }) => {
+      setLists((prev) => {
+        const updated = prev.map((l) => {
+          if (l.id === sourceListId) {
+            return {
+              ...l,
+              cards: l.cards.filter((c) => c.id !== card.id),
+            };
+          } else if (l.id === destListId) {
+            const exists = l.cards.some((c) => c.id === card.id);
+            if (exists) return l;
+            return { ...l, cards: [...l.cards, card] };
+          }
+          return l;
+        });
+        return updated;
+      });
+    });
+
+    return () => {
+      console.log("🧹 Cerrando conexión WebSocket...");
+      socket.disconnect();
+    };
+  }, []);
+
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
@@ -66,67 +162,73 @@ const Board: React.FC = () => {
     )
       return;
 
-    const sourceListIndex = lists.findIndex((l) => l.id === source.droppableId);
+    const sourceListIndex = lists.findIndex(
+      (l) => l.id === source.droppableId
+    );
     const destListIndex = lists.findIndex(
       (l) => l.id === destination.droppableId
     );
     if (sourceListIndex === -1 || destListIndex === -1) return;
 
     const newLists = [...lists];
-    const [movedTask] = newLists[sourceListIndex].cards.splice(source.index, 1);
-    const taskWithNewListId = { ...movedTask, listId: destination.droppableId };
-    newLists[destListIndex].cards.splice(destination.index, 0, taskWithNewListId);
+    const [movedTask] = newLists[sourceListIndex].cards.splice(
+      source.index,
+      1
+    );
+    const taskWithNewListId = {
+      ...movedTask,
+      listId: destination.droppableId,
+    };
+    newLists[destListIndex].cards.splice(
+      destination.index,
+      0,
+      taskWithNewListId
+    );
     setLists(newLists);
 
     try {
       await apiService.put(`/v1/cards/${draggableId}`, {
         listId: destination.droppableId,
+        sourceListId: source.droppableId,
       });
     } catch (err) {
       console.error("Error al mover la tarea:", err);
     }
   };
 
+
   const handleCreateList = async () => {
     if (!newListTitle.trim()) return;
     try {
-      const newList = await apiService.post<List>("/lists", {
+      await apiService.post<List>("/lists", {
         title: newListTitle,
         order: lists.length,
       });
-      setLists((prev) => [...prev, { ...newList, cards: [] }]);
       setNewListTitle("");
-    } catch (err) {
-      console.error("Error al crear lista:", err);
+    } catch {
       alert("No se pudo crear la lista");
     }
   };
 
-  const handleDeleteList = async (listId: string) => {
-    const confirmDelete = window.confirm("¿Seguro que deseas eliminar esta lista?");
-    if (!confirmDelete) return;
-    try {
-      await apiService.delete(`/lists/${listId}`);
-      setLists((prev) => prev.filter((l) => l.id !== listId));
-    } catch (err) {
-      console.error("Error al eliminar lista:", err);
-      alert("No se pudo eliminar la lista");
-    }
-  };
 
   const handleEditList = async (listId: string) => {
     if (!editedTitle.trim()) return;
     try {
-      const updated = await apiService.put<List>(`/lists/${listId}`, {
+      await apiService.put<List>(`/lists/${listId}`, {
         title: editedTitle,
       });
-      setLists((prev) =>
-        prev.map((l) => (l.id === listId ? { ...l, title: updated.title } : l))
-      );
       setEditingListId(null);
-    } catch (err) {
-      console.error("Error al editar lista:", err);
+    } catch {
       alert("No se pudo actualizar la lista");
+    }
+  };
+
+  const handleDeleteList = async (listId: string) => {
+    if (!window.confirm("¿Seguro que deseas eliminar esta lista?")) return;
+    try {
+      await apiService.delete(`/lists/${listId}`);
+    } catch {
+      alert("No se pudo eliminar la lista");
     }
   };
 
@@ -134,23 +236,17 @@ const Board: React.FC = () => {
     if (!newTaskTitle.trim()) return;
     setIsCreating(true);
     try {
-      const newCard = await apiService.post<Task>("/v1/cards", {
+      await apiService.post<Task>("/v1/cards", {
         cardData: {
           title: newTaskTitle,
           description: newTaskDescription || "Sin descripción",
         },
         listId,
       });
-      setLists((prev) =>
-        prev.map((list) =>
-          list.id === listId ? { ...list, cards: [...list.cards, newCard] } : list
-        )
-      );
       setNewTaskTitle("");
       setNewTaskDescription("");
       setActiveListId(null);
-    } catch (err) {
-      console.error("Error al crear tarea:", err);
+    } catch {
       alert("Error al crear la tarea");
     } finally {
       setIsCreating(false);
@@ -158,24 +254,16 @@ const Board: React.FC = () => {
   };
 
   const handleDeleteTask = async (listId: string, taskId: string) => {
-    const confirmDelete = window.confirm("¿Seguro que deseas eliminar esta tarea?");
-    if (!confirmDelete) return;
+    if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
     try {
       await apiService.delete(`/v1/cards/${taskId}`);
-      setLists((prev) =>
-        prev.map((list) =>
-          list.id === listId
-            ? { ...list, cards: list.cards.filter((c) => c.id !== taskId) }
-            : list
-        )
-      );
-    } catch (err) {
-      console.error("Error al eliminar tarea:", err);
+    } catch {
       alert("Error al eliminar la tarea");
     }
   };
 
-  if (loading) return <p className="text-center text-text-muted">Cargando...</p>;
+  if (loading)
+    return <p className="text-center text-text-muted">Cargando...</p>;
   if (error) return <p className="text-center text-text-error">{error}</p>;
 
   return (
@@ -190,7 +278,7 @@ const Board: React.FC = () => {
           placeholder="Nombre lista"
           value={newListTitle}
           onChange={(e) => setNewListTitle(e.target.value)}
-          className="p-2 rounded-xl bg-dark-800 border border-dark-600 text-sm text-text-primary placeholder-text-muted focus:outline-none focus:ring-2 focus:ring-limeyellow-500 w-60 transition-all"
+          className="p-2 rounded-xl bg-dark-800 border border-dark-600 text-sm w-60"
         />
         <button
           onClick={handleCreateList}
@@ -201,7 +289,7 @@ const Board: React.FC = () => {
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex flex-row gap-6 overflow-x-auto flex-1 items-stretch scrollbar-custom">
+        <div className="flex flex-row gap-6 overflow-x-auto flex-1">
           {lists.map((list) => (
             <Droppable droppableId={list.id} key={list.id}>
               {(provided) => (
@@ -216,12 +304,18 @@ const Board: React.FC = () => {
                         <input
                           type="text"
                           value={editedTitle}
-                          onChange={(e) => setEditedTitle(e.target.value)}
-                          className="p-2 text-sm bg-dark-900 border border-dark-600 rounded-xl text-text-primary flex-1"
+                          onChange={(e) =>
+                            setEditedTitle(
+                              e.target.value
+                            )
+                          }
+                          className="p-2 text-sm bg-dark-900 border border-dark-600 rounded-xl flex-1"
                         />
                         <button
-                          onClick={() => handleEditList(list.id)}
-                          className="text-limeyellow-500 hover:text-limeyellow-400 transition text-sm"
+                          onClick={() =>
+                            handleEditList(list.id)
+                          }
+                          className="text-limeyellow-500 text-sm"
                         >
                           Guardar
                         </button>
@@ -229,21 +323,28 @@ const Board: React.FC = () => {
                     ) : (
                       <>
                         <h2 className="text-lg font-semibold truncate">
-                          {list.title} ({list.cards.length})
+                          {list.title} (
+                          {list.cards.length})
                         </h2>
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              setEditingListId(list.id);
-                              setEditedTitle(list.title);
+                              setEditingListId(
+                                list.id
+                              );
+                              setEditedTitle(
+                                list.title
+                              );
                             }}
-                            className="text-text-muted hover:text-limeyellow-400"
                           >
                             <Pencil size={16} />
                           </button>
                           <button
-                            onClick={() => handleDeleteList(list.id)}
-                            className="text-text-muted hover:text-red-400"
+                            onClick={() =>
+                              handleDeleteList(
+                                list.id
+                              )
+                            }
                           >
                             <Trash2 size={16} />
                           </button>
@@ -254,43 +355,59 @@ const Board: React.FC = () => {
 
                   <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
                     {list.cards.map((task, index) => (
-                    <Draggable key={task.id} draggableId={task.id} index={index}>
-                      {(provided, snapshot) => {
-                        const card = (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`relative p-3 rounded-xl border text-sm select-none animate-fade-in transition-all duration-200 
-                              ${
-                              snapshot.isDragging
-                                ? "bg-dark-700 border-dark-600 shadow-[0_0_10px_2px_rgba(79,70,229,0.6)] scale-[1.02] z-[9999]"
-                                : "bg-dark-800 border-dark-600 hover:shadow-[0_0_8px_1px_rgba(79,70,229,0.4)]"
-                              }`}
-                          >
-                            <h3 className="font-medium text-text-primary truncate">
-                              {task.title}
-                            </h3>
-                            <p className="text-xs text-text-muted mt-1 line-clamp-2">
-                              {task.description}
-                            </p>
-
-                            <button
-                              onClick={() => handleDeleteTask(list.id, task.id)}
-                              className="absolute top-2 right-2 text-text-muted hover:text-red-400 transition"
+                      <Draggable
+                        key={task.id}
+                        draggableId={task.id}
+                        index={index}
+                      >
+                        {(provided, snapshot) => {
+                          const card = (
+                            <div
+                              ref={
+                                provided.innerRef
+                              }
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`relative p-3 rounded-2xl border text-sm select-none transition-all duration-300 ease-out transform ${snapshot.isDragging
+                                  ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md shadow-dark-700/50"
+                                  : "bg-dark-800 border-dark-600 hover:border-limeyellow-400 hover:shadow-sm"
+                                }`}
                             >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        );
-                        return snapshot.isDragging ? (
-                          <DragOverlayPortal>{card}</DragOverlayPortal>
-                        ) : (
-                          card
-                        );
-                      }}
-                    </Draggable>
+                              <h3 className="font-medium truncate text-text-primary">
+                                {task.title}
+                              </h3>
+                              <p className="text-xs mt-1 line-clamp-2 text-text-muted">
+                                {
+                                  task.description
+                                }
+                              </p>
 
+                              <button
+                                onClick={() =>
+                                  handleDeleteTask(
+                                    list.id,
+                                    task.id
+                                  )
+                                }
+                                className="absolute top-2 right-2 text-text-muted hover:text-red-400 transition-colors"
+                              >
+                                <Trash2
+                                  size={14}
+                                />
+                              </button>
+                            </div>
+                          );
+                          return snapshot.isDragging ? (
+                            <DragOverlayPortal>
+                              <div className="pointer-events-none">
+                                {card}
+                              </div>
+                            </DragOverlayPortal>
+                          ) : (
+                            card
+                          );
+                        }}
+                      </Draggable>
                     ))}
                     {provided.placeholder}
 
@@ -300,30 +417,48 @@ const Board: React.FC = () => {
                           type="text"
                           placeholder="Título de la tarea"
                           value={newTaskTitle}
-                          onChange={(e) => setNewTaskTitle(e.target.value)}
-                          className="w-full p-2 rounded-lg bg-dark-800 text-sm text-text-primary border border-dark-600"
+                          onChange={(e) =>
+                            setNewTaskTitle(
+                              e.target.value
+                            )
+                          }
+                          className="w-full p-2 rounded-lg bg-dark-800 text-sm"
                         />
                         <textarea
                           placeholder="Descripción (opcional)"
                           value={newTaskDescription}
-                          onChange={(e) => setNewTaskDescription(e.target.value)}
-                          className="w-full p-2 rounded-lg bg-dark-800 text-sm text-text-primary border border-dark-600"
+                          onChange={(e) =>
+                            setNewTaskDescription(
+                              e.target.value
+                            )
+                          }
+                          className="w-full p-2 rounded-lg bg-dark-800 text-sm"
                         />
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleCreateTask(list.id)}
+                            onClick={() =>
+                              handleCreateTask(
+                                list.id
+                              )
+                            }
                             disabled={isCreating}
-                            className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm hover:bg-limeyellow-600 disabled:opacity-50"
+                            className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm"
                           >
-                            {isCreating ? "Creando..." : "Añadir"}
+                            {isCreating
+                              ? "Creando..."
+                              : "Añadir"}
                           </button>
                           <button
                             onClick={() => {
-                              setActiveListId(null);
+                              setActiveListId(
+                                null
+                              );
                               setNewTaskTitle("");
-                              setNewTaskDescription("");
+                              setNewTaskDescription(
+                                ""
+                              );
                             }}
-                            className="px-3 py-1 bg-dark-600 text-text-muted rounded-lg text-sm hover:bg-dark-700"
+                            className="px-3 py-1 bg-dark-600 text-sm"
                           >
                             Cancelar
                           </button>
@@ -336,7 +471,7 @@ const Board: React.FC = () => {
                           setNewTaskTitle("");
                           setNewTaskDescription("");
                         }}
-                        className="mt-4 w-full text-sm text-text-muted hover:text-text-primary p-2 border border-dashed border-dark-600 rounded-xl hover:border-limeyellow-500"
+                        className="mt-4 w-full text-sm text-text-muted hover:text-text-primary p-2 border border-dashed border-dark-600 rounded-xl"
                       >
                         + Añadir tarea
                       </button>
