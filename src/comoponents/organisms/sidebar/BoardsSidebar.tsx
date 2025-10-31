@@ -55,23 +55,25 @@ const BoardsSidebar: React.FC = () => {
   // Función de fetch de boards
   const fetchBoards = useCallback(
     async (pageNumber = 1, replace = false) => {
-      if (!WORKSPACE_ID) return;
+      if (!WORKSPACE_ID || loading) return;
       try {
         setLoading(true);
         setError(null);
-
-        const data = await apiService.get<{ items: Board[]; total?: number }>(
+  
+        const data = await apiService.get<{ items: Board[] }>(
           `/v1/boards/paginated?page=${pageNumber}&limit=${LIMIT}&workspaceId=${WORKSPACE_ID}`
         );
-
+  
         const boardsData = Array.isArray(data) ? data : data?.items ?? [];
-
-        if (replace) {
-          setBoards(boardsData);
-        } else {
-          setBoards((prev) => [...prev, ...boardsData]);
-        }
-
+  
+        setBoards((prev) => {
+          const merged = replace ? boardsData : [...prev, ...boardsData];
+          const unique = merged.filter(
+            (b, index, self) => index === self.findIndex((x) => x.id === b.id)
+          );
+          return unique;
+        });
+  
         setHasMore(boardsData.length === LIMIT);
       } catch (err) {
         console.error("Error fetching boards:", err);
@@ -81,8 +83,9 @@ const BoardsSidebar: React.FC = () => {
         setLoading(false);
       }
     },
-    [WORKSPACE_ID]
+    [WORKSPACE_ID, loading]
   );
+  
 
   // Carga inicial
   useEffect(() => {
@@ -171,10 +174,6 @@ const BoardsSidebar: React.FC = () => {
             color={b.color || stringToColor(b.id)}
           />
         ))}
-
-        {loading && (
-          <p className="text-sm text-text-secondary text-center">Cargando...</p>
-        )}
 
         {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 

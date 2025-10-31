@@ -21,6 +21,10 @@ interface List {
   cards: Task[];
 }
 
+interface BoardProps {
+  boardId: string;
+}
+
 const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -29,7 +33,7 @@ const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   return ReactDOM.createPortal(children, portal ?? document.body);
 };
 
-const Board: React.FC = () => {
+const Board: React.FC<BoardProps> = ({ boardId }) => {
   const [lists, setLists] = React.useState<List[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -38,15 +42,13 @@ const Board: React.FC = () => {
   const [newTaskDescription, setNewTaskDescription] = React.useState("");
   const [isCreating, setIsCreating] = React.useState(false);
   const [newListTitle, setNewListTitle] = React.useState("");
-  const [editingListId, setEditingListId] = React.useState<string | null>(
-    null
-  );
+  const [editingListId, setEditingListId] = React.useState<string | null>(null);
   const [editedTitle, setEditedTitle] = React.useState("");
 
   React.useEffect(() => {
     const fetchLists = async () => {
       try {
-        const data = await apiService.get<List[]>("/lists");
+        const data = await apiService.get<List[]>(`/lists?boardId=${boardId}`);
         setLists(data);
       } catch (err) {
         console.error("Error al cargar las listas:", err);
@@ -56,7 +58,7 @@ const Board: React.FC = () => {
       }
     };
     fetchLists();
-  }, []);
+  }, [boardId]);
 
   React.useEffect(() => {
     const socket: Socket = io("https://localhost:3000", {
@@ -65,12 +67,11 @@ const Board: React.FC = () => {
       rejectUnauthorized: false,
     });
 
-    socket.on("connect", () => console.log("🟢 Conectado a WebSocket"));
-    socket.on("disconnect", () =>
-      console.log("🔴 Desconectado de WebSocket")
-    );
+    socket.on("connect", () => console.log("Conectado a WebSocket"));
+    socket.on("disconnect", () => console.log("Desconectado de WebSocket"));
 
     socket.on("list:created", (newList: List) => {
+      if ((newList as any).board?.id !== boardId) return;
       setLists((prev) => {
         const exists = prev.some((l) => l.id === newList.id);
         if (exists) return prev;
@@ -92,26 +93,26 @@ const Board: React.FC = () => {
 
     socket.on("card:created", ({ listId, card }) => {
       setLists((prev) =>
-        prev.map((l) => {
-          if (l.id !== listId) return l;
-          const exists = l.cards.some((c) => c.id === card.id);
-          if (exists) return l;
-          return { ...l, cards: [...l.cards, card] };
-        })
+        prev.map((l) =>
+          l.id === listId
+            ? { ...l, cards: [...l.cards, card] }
+            : l
+        )
       );
     });
 
     socket.on("card:updated", ({ listId, card }) => {
       setLists((prev) =>
-        prev.map((l) => {
-          if (l.id !== listId) return l;
-          return {
-            ...l,
-            cards: l.cards.map((c) =>
-              c.id === card.id ? { ...c, ...card } : c
-            ),
-          };
-        })
+        prev.map((l) =>
+          l.id === listId
+            ? {
+                ...l,
+                cards: l.cards.map((c) =>
+                  c.id === card.id ? { ...c, ...card } : c
+                ),
+              }
+            : l
+        )
       );
     });
 
@@ -119,18 +120,15 @@ const Board: React.FC = () => {
       setLists((prev) =>
         prev.map((l) =>
           l.id === listId
-            ? {
-              ...l,
-              cards: l.cards.filter((c) => c.id !== cardId),
-            }
+            ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
             : l
         )
       );
     });
 
     socket.on("card:moved", ({ sourceListId, destListId, card }) => {
-      setLists((prev) => {
-        const updated = prev.map((l) => {
+      setLists((prev) =>
+        prev.map((l) => {
           if (l.id === sourceListId) {
             return {
               ...l,
@@ -142,16 +140,15 @@ const Board: React.FC = () => {
             return { ...l, cards: [...l.cards, card] };
           }
           return l;
-        });
-        return updated;
-      });
+        })
+      );
     });
 
     return () => {
-      console.log("🧹 Cerrando conexión WebSocket...");
+      console.log("Cerrando conexión WebSocket...");
       socket.disconnect();
     };
-  }, []);
+  }, [boardId]);
 
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -171,10 +168,7 @@ const Board: React.FC = () => {
     if (sourceListIndex === -1 || destListIndex === -1) return;
 
     const newLists = [...lists];
-    const [movedTask] = newLists[sourceListIndex].cards.splice(
-      source.index,
-      1
-    );
+    const [movedTask] = newLists[sourceListIndex].cards.splice(source.index, 1);
     const taskWithNewListId = {
       ...movedTask,
       listId: destination.droppableId,
@@ -196,20 +190,19 @@ const Board: React.FC = () => {
     }
   };
 
-
   const handleCreateList = async () => {
     if (!newListTitle.trim()) return;
     try {
       await apiService.post<List>("/lists", {
         title: newListTitle,
         order: lists.length,
+        board: { id: boardId },
       });
       setNewListTitle("");
     } catch {
       alert("No se pudo crear la lista");
     }
   };
-
 
   const handleEditList = async (listId: string) => {
     if (!editedTitle.trim()) return;
@@ -289,7 +282,7 @@ const Board: React.FC = () => {
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex flex-row gap-6 overflow-x-auto flex-1">
+        <div className="flex flex-row gap-6 overflow-x-auto flex-1 scrollbar-custom">
           {lists.map((list) => (
             <Droppable droppableId={list.id} key={list.id}>
               {(provided) => (
@@ -304,17 +297,11 @@ const Board: React.FC = () => {
                         <input
                           type="text"
                           value={editedTitle}
-                          onChange={(e) =>
-                            setEditedTitle(
-                              e.target.value
-                            )
-                          }
+                          onChange={(e) => setEditedTitle(e.target.value)}
                           className="p-2 text-sm bg-dark-900 border border-dark-600 rounded-xl flex-1"
                         />
                         <button
-                          onClick={() =>
-                            handleEditList(list.id)
-                          }
+                          onClick={() => handleEditList(list.id)}
                           className="text-limeyellow-500 text-sm"
                         >
                           Guardar
@@ -323,29 +310,18 @@ const Board: React.FC = () => {
                     ) : (
                       <>
                         <h2 className="text-lg font-semibold truncate">
-                          {list.title} (
-                          {list.cards.length})
+                          {list.title} ({list.cards.length})
                         </h2>
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              setEditingListId(
-                                list.id
-                              );
-                              setEditedTitle(
-                                list.title
-                              );
+                              setEditingListId(list.id);
+                              setEditedTitle(list.title);
                             }}
                           >
                             <Pencil size={16} />
                           </button>
-                          <button
-                            onClick={() =>
-                              handleDeleteList(
-                                list.id
-                              )
-                            }
-                          >
+                          <button onClick={() => handleDeleteList(list.id)}>
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -353,55 +329,39 @@ const Board: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
+                  <div className="flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-custom">
                     {list.cards.map((task, index) => (
-                      <Draggable
-                        key={task.id}
-                        draggableId={task.id}
-                        index={index}
-                      >
+                      <Draggable key={task.id} draggableId={task.id} index={index}>
                         {(provided, snapshot) => {
                           const card = (
                             <div
-                              ref={
-                                provided.innerRef
-                              }
+                              ref={provided.innerRef}
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`relative p-3 rounded-2xl border text-sm select-none transition-all duration-300 ease-out transform ${snapshot.isDragging
+                              className={`relative p-3 rounded-2xl border text-sm select-none transition-all duration-300 ease-out transform ${
+                                snapshot.isDragging
                                   ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md shadow-dark-700/50"
                                   : "bg-dark-800 border-dark-600 hover:border-limeyellow-400 hover:shadow-sm"
-                                }`}
+                              }`}
                             >
                               <h3 className="font-medium truncate text-text-primary">
                                 {task.title}
                               </h3>
                               <p className="text-xs mt-1 line-clamp-2 text-text-muted">
-                                {
-                                  task.description
-                                }
+                                {task.description}
                               </p>
 
                               <button
-                                onClick={() =>
-                                  handleDeleteTask(
-                                    list.id,
-                                    task.id
-                                  )
-                                }
+                                onClick={() => handleDeleteTask(list.id, task.id)}
                                 className="absolute top-2 right-2 text-text-muted hover:text-red-400 transition-colors"
                               >
-                                <Trash2
-                                  size={14}
-                                />
+                                <Trash2 size={14} />
                               </button>
                             </div>
                           );
                           return snapshot.isDragging ? (
                             <DragOverlayPortal>
-                              <div className="pointer-events-none">
-                                {card}
-                              </div>
+                              <div className="pointer-events-none">{card}</div>
                             </DragOverlayPortal>
                           ) : (
                             card
@@ -417,46 +377,28 @@ const Board: React.FC = () => {
                           type="text"
                           placeholder="Título de la tarea"
                           value={newTaskTitle}
-                          onChange={(e) =>
-                            setNewTaskTitle(
-                              e.target.value
-                            )
-                          }
+                          onChange={(e) => setNewTaskTitle(e.target.value)}
                           className="w-full p-2 rounded-lg bg-dark-800 text-sm"
                         />
                         <textarea
                           placeholder="Descripción (opcional)"
                           value={newTaskDescription}
-                          onChange={(e) =>
-                            setNewTaskDescription(
-                              e.target.value
-                            )
-                          }
+                          onChange={(e) => setNewTaskDescription(e.target.value)}
                           className="w-full p-2 rounded-lg bg-dark-800 text-sm"
                         />
                         <div className="flex gap-2">
                           <button
-                            onClick={() =>
-                              handleCreateTask(
-                                list.id
-                              )
-                            }
+                            onClick={() => handleCreateTask(list.id)}
                             disabled={isCreating}
                             className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm"
                           >
-                            {isCreating
-                              ? "Creando..."
-                              : "Añadir"}
+                            {isCreating ? "Creando..." : "Añadir"}
                           </button>
                           <button
                             onClick={() => {
-                              setActiveListId(
-                                null
-                              );
+                              setActiveListId(null);
                               setNewTaskTitle("");
-                              setNewTaskDescription(
-                                ""
-                              );
+                              setNewTaskDescription("");
                             }}
                             className="px-3 py-1 bg-dark-600 text-sm"
                           >
