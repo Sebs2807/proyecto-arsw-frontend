@@ -21,7 +21,9 @@ interface List {
   cards: Task[];
 }
 
-const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
   if (typeof window === "undefined") return null;
   const portal = document.getElementById("drag-portal");
   return ReactDOM.createPortal(children, portal ?? document.body);
@@ -36,10 +38,11 @@ const Board: React.FC = () => {
   const [newTaskDescription, setNewTaskDescription] = React.useState("");
   const [isCreating, setIsCreating] = React.useState(false);
   const [newListTitle, setNewListTitle] = React.useState("");
-  const [editingListId, setEditingListId] = React.useState<string | null>(null);
+  const [editingListId, setEditingListId] = React.useState<string | null>(
+    null
+  );
   const [editedTitle, setEditedTitle] = React.useState("");
 
-  // 🔹 Cargar listas iniciales
   React.useEffect(() => {
     const fetchLists = async () => {
       try {
@@ -55,113 +58,132 @@ const Board: React.FC = () => {
     fetchLists();
   }, []);
 
-  // 🔹 Conexión WebSocket
-  // 🔹 Conexión WebSocket
-React.useEffect(() => {
-  const socket: Socket = io("https://localhost:3000", {
-    transports: ["websocket"],
-    secure: true,
-    rejectUnauthorized: false, // para certificados mkcert
-  });
-
-  socket.on("connect", () => console.log("🟢 Conectado a WebSocket"));
-  socket.on("disconnect", () => console.log("🔴 Desconectado de WebSocket"));
-
-  // 🔸 LISTS
-  socket.on("list:created", (newList: List) => {
-    setLists((prev) => {
-      const exists = prev.some((l) => l.id === newList.id);
-      if (exists) return prev;
-      return [...prev, { ...newList, cards: [] }];
+  React.useEffect(() => {
+    const socket: Socket = io("https://localhost:3000", {
+      transports: ["websocket"],
+      secure: true,
+      rejectUnauthorized: false,
     });
-  });
 
-  socket.on("list:updated", (updatedList: List) => {
-    setLists((prev) =>
-      prev.map((l) =>
-        l.id === updatedList.id ? { ...l, ...updatedList } : l
-      )
+    socket.on("connect", () => console.log("🟢 Conectado a WebSocket"));
+    socket.on("disconnect", () =>
+      console.log("🔴 Desconectado de WebSocket")
     );
-  });
 
-  socket.on("list:deleted", ({ id }: { id: string }) => {
-    setLists((prev) => prev.filter((l) => l.id !== id));
-  });
-
-  // 🔸 CARDS
-  socket.on("card:created", ({ listId, card }) => {
-    setLists((prev) =>
-      prev.map((l) => {
-        if (l.id !== listId) return l;
-        const exists = l.cards.some((c) => c.id === card.id);
-        if (exists) return l;
-        return { ...l, cards: [...l.cards, card] };
-      })
-    );
-  });
-
-  socket.on("card:updated", ({ listId, card }) => {
-    setLists((prev) =>
-      prev.map((l) => {
-        if (l.id !== listId) return l;
-        return {
-          ...l,
-          cards: l.cards.map((c) =>
-            c.id === card.id ? { ...c, ...card } : c
-          ),
-        };
-      })
-    );
-  });
-
-  socket.on("card:deleted", ({ listId, cardId }) => {
-    setLists((prev) =>
-      prev.map((l) =>
-        l.id === listId
-          ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
-          : l
-      )
-    );
-  });
-
-  socket.on("card:moved", ({ sourceListId, destListId, card }) => {
-    setLists((prev) => {
-      const updated = prev.map((l) => {
-        if (l.id === sourceListId) {
-          return { ...l, cards: l.cards.filter((c) => c.id !== card.id) };
-        } else if (l.id === destListId) {
-          const exists = l.cards.some((c) => c.id === card.id);
-          if (exists) return l; // evitar duplicados al mover
-          return { ...l, cards: [...l.cards, card] };
-        }
-        return l;
+    socket.on("list:created", (newList: List) => {
+      setLists((prev) => {
+        const exists = prev.some((l) => l.id === newList.id);
+        if (exists) return prev;
+        return [...prev, { ...newList, cards: [] }];
       });
-      return updated;
     });
-  });
 
-  // 🔹 Limpieza
-  return () => {
-    console.log("🧹 Cerrando conexión WebSocket...");
-    socket.disconnect();
-  };
-}, []);
+    socket.on("list:updated", (updatedList: List) => {
+      setLists((prev) =>
+        prev.map((l) =>
+          l.id === updatedList.id ? { ...l, ...updatedList } : l
+        )
+      );
+    });
 
-  // 🔹 Drag & Drop
+    socket.on("list:deleted", ({ id }: { id: string }) => {
+      setLists((prev) => prev.filter((l) => l.id !== id));
+    });
+
+    socket.on("card:created", ({ listId, card }) => {
+      setLists((prev) =>
+        prev.map((l) => {
+          if (l.id !== listId) return l;
+          const exists = l.cards.some((c) => c.id === card.id);
+          if (exists) return l;
+          return { ...l, cards: [...l.cards, card] };
+        })
+      );
+    });
+
+    socket.on("card:updated", ({ listId, card }) => {
+      setLists((prev) =>
+        prev.map((l) => {
+          if (l.id !== listId) return l;
+          return {
+            ...l,
+            cards: l.cards.map((c) =>
+              c.id === card.id ? { ...c, ...card } : c
+            ),
+          };
+        })
+      );
+    });
+
+    socket.on("card:deleted", ({ listId, cardId }) => {
+      setLists((prev) =>
+        prev.map((l) =>
+          l.id === listId
+            ? {
+              ...l,
+              cards: l.cards.filter((c) => c.id !== cardId),
+            }
+            : l
+        )
+      );
+    });
+
+    socket.on("card:moved", ({ sourceListId, destListId, card }) => {
+      setLists((prev) => {
+        const updated = prev.map((l) => {
+          if (l.id === sourceListId) {
+            return {
+              ...l,
+              cards: l.cards.filter((c) => c.id !== card.id),
+            };
+          } else if (l.id === destListId) {
+            const exists = l.cards.some((c) => c.id === card.id);
+            if (exists) return l;
+            return { ...l, cards: [...l.cards, card] };
+          }
+          return l;
+        });
+        return updated;
+      });
+    });
+
+    return () => {
+      console.log("🧹 Cerrando conexión WebSocket...");
+      socket.disconnect();
+    };
+  }, []);
+
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
     if (!destination) return;
-    if (destination.droppableId === source.droppableId && destination.index === source.index)
+    if (
+      destination.droppableId === source.droppableId &&
+      destination.index === source.index
+    )
       return;
 
-    const sourceListIndex = lists.findIndex((l) => l.id === source.droppableId);
-    const destListIndex = lists.findIndex((l) => l.id === destination.droppableId);
+    const sourceListIndex = lists.findIndex(
+      (l) => l.id === source.droppableId
+    );
+    const destListIndex = lists.findIndex(
+      (l) => l.id === destination.droppableId
+    );
     if (sourceListIndex === -1 || destListIndex === -1) return;
 
     const newLists = [...lists];
-    const [movedTask] = newLists[sourceListIndex].cards.splice(source.index, 1);
-    const taskWithNewListId = { ...movedTask, listId: destination.droppableId };
-    newLists[destListIndex].cards.splice(destination.index, 0, taskWithNewListId);
+    const [movedTask] = newLists[sourceListIndex].cards.splice(
+      source.index,
+      1
+    );
+    const taskWithNewListId = {
+      ...movedTask,
+      listId: destination.droppableId,
+    };
+    newLists[destListIndex].cards.splice(
+      destination.index,
+      0,
+      taskWithNewListId
+    );
     setLists(newLists);
 
     try {
@@ -174,7 +196,7 @@ React.useEffect(() => {
     }
   };
 
-  // 🔹 Crear lista
+
   const handleCreateList = async () => {
     if (!newListTitle.trim()) return;
     try {
@@ -188,18 +210,19 @@ React.useEffect(() => {
     }
   };
 
-  // 🔹 Editar lista
+
   const handleEditList = async (listId: string) => {
     if (!editedTitle.trim()) return;
     try {
-      await apiService.put<List>(`/lists/${listId}`, { title: editedTitle });
+      await apiService.put<List>(`/lists/${listId}`, {
+        title: editedTitle,
+      });
       setEditingListId(null);
     } catch {
       alert("No se pudo actualizar la lista");
     }
   };
 
-  // 🔹 Eliminar lista
   const handleDeleteList = async (listId: string) => {
     if (!window.confirm("¿Seguro que deseas eliminar esta lista?")) return;
     try {
@@ -209,7 +232,6 @@ React.useEffect(() => {
     }
   };
 
-  // 🔹 Crear tarea
   const handleCreateTask = async (listId: string) => {
     if (!newTaskTitle.trim()) return;
     setIsCreating(true);
@@ -231,7 +253,6 @@ React.useEffect(() => {
     }
   };
 
-  // 🔹 Eliminar tarea
   const handleDeleteTask = async (listId: string, taskId: string) => {
     if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
     try {
@@ -241,13 +262,15 @@ React.useEffect(() => {
     }
   };
 
-  // 🔹 Render
-  if (loading) return <p className="text-center text-text-muted">Cargando...</p>;
+  if (loading)
+    return <p className="text-center text-text-muted">Cargando...</p>;
   if (error) return <p className="text-center text-text-error">{error}</p>;
 
   return (
     <div className="bg-dark-900 p-6 text-text-primary font-poppins h-screen flex flex-col">
-      <h1 className="text-2xl font-semibold mb-6 text-text-secondary">Tablero CRM Dinámico</h1>
+      <h1 className="text-2xl font-semibold mb-6 text-text-secondary">
+        Tablero CRM Dinámico
+      </h1>
 
       <div className="mb-6 flex gap-2 items-center">
         <input
@@ -281,11 +304,17 @@ React.useEffect(() => {
                         <input
                           type="text"
                           value={editedTitle}
-                          onChange={(e) => setEditedTitle(e.target.value)}
+                          onChange={(e) =>
+                            setEditedTitle(
+                              e.target.value
+                            )
+                          }
                           className="p-2 text-sm bg-dark-900 border border-dark-600 rounded-xl flex-1"
                         />
                         <button
-                          onClick={() => handleEditList(list.id)}
+                          onClick={() =>
+                            handleEditList(list.id)
+                          }
                           className="text-limeyellow-500 text-sm"
                         >
                           Guardar
@@ -294,18 +323,29 @@ React.useEffect(() => {
                     ) : (
                       <>
                         <h2 className="text-lg font-semibold truncate">
-                          {list.title} ({list.cards.length})
+                          {list.title} (
+                          {list.cards.length})
                         </h2>
                         <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              setEditingListId(list.id);
-                              setEditedTitle(list.title);
+                              setEditingListId(
+                                list.id
+                              );
+                              setEditedTitle(
+                                list.title
+                              );
                             }}
                           >
                             <Pencil size={16} />
                           </button>
-                          <button onClick={() => handleDeleteList(list.id)}>
+                          <button
+                            onClick={() =>
+                              handleDeleteList(
+                                list.id
+                              )
+                            }
+                          >
                             <Trash2 size={16} />
                           </button>
                         </div>
@@ -315,35 +355,54 @@ React.useEffect(() => {
 
                   <div className="flex-1 flex flex-col gap-3 overflow-y-auto">
                     {list.cards.map((task, index) => (
-                      <Draggable key={task.id} draggableId={task.id} index={index}>
+                      <Draggable
+                        key={task.id}
+                        draggableId={task.id}
+                        index={index}
+                      >
                         {(provided, snapshot) => {
                           const card = (
                             <div
-                              ref={provided.innerRef}
+                              ref={
+                                provided.innerRef
+                              }
                               {...provided.draggableProps}
                               {...provided.dragHandleProps}
-                              className={`relative p-3 rounded-xl border text-sm select-none transition-all duration-200 
-                                ${
-                                  snapshot.isDragging
-                                    ? "bg-dark-700 border-dark-600 scale-[1.02]"
-                                    : "bg-dark-800 border-dark-600"
+                              className={`relative p-3 rounded-2xl border text-sm select-none transition-all duration-300 ease-out transform ${snapshot.isDragging
+                                  ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md shadow-dark-700/50"
+                                  : "bg-dark-800 border-dark-600 hover:border-limeyellow-400 hover:shadow-sm"
                                 }`}
                             >
-                              <h3 className="font-medium truncate">{task.title}</h3>
-                              <p className="text-xs mt-1 line-clamp-2">
-                                {task.description}
+                              <h3 className="font-medium truncate text-text-primary">
+                                {task.title}
+                              </h3>
+                              <p className="text-xs mt-1 line-clamp-2 text-text-muted">
+                                {
+                                  task.description
+                                }
                               </p>
 
                               <button
-                                onClick={() => handleDeleteTask(list.id, task.id)}
-                                className="absolute top-2 right-2 text-text-muted hover:text-red-400"
+                                onClick={() =>
+                                  handleDeleteTask(
+                                    list.id,
+                                    task.id
+                                  )
+                                }
+                                className="absolute top-2 right-2 text-text-muted hover:text-red-400 transition-colors"
                               >
-                                <Trash2 size={14} />
+                                <Trash2
+                                  size={14}
+                                />
                               </button>
                             </div>
                           );
                           return snapshot.isDragging ? (
-                            <DragOverlayPortal>{card}</DragOverlayPortal>
+                            <DragOverlayPortal>
+                              <div className="pointer-events-none">
+                                {card}
+                              </div>
+                            </DragOverlayPortal>
                           ) : (
                             card
                           );
@@ -358,28 +417,46 @@ React.useEffect(() => {
                           type="text"
                           placeholder="Título de la tarea"
                           value={newTaskTitle}
-                          onChange={(e) => setNewTaskTitle(e.target.value)}
+                          onChange={(e) =>
+                            setNewTaskTitle(
+                              e.target.value
+                            )
+                          }
                           className="w-full p-2 rounded-lg bg-dark-800 text-sm"
                         />
                         <textarea
                           placeholder="Descripción (opcional)"
                           value={newTaskDescription}
-                          onChange={(e) => setNewTaskDescription(e.target.value)}
+                          onChange={(e) =>
+                            setNewTaskDescription(
+                              e.target.value
+                            )
+                          }
                           className="w-full p-2 rounded-lg bg-dark-800 text-sm"
                         />
                         <div className="flex gap-2">
                           <button
-                            onClick={() => handleCreateTask(list.id)}
+                            onClick={() =>
+                              handleCreateTask(
+                                list.id
+                              )
+                            }
                             disabled={isCreating}
                             className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm"
                           >
-                            {isCreating ? "Creando..." : "Añadir"}
+                            {isCreating
+                              ? "Creando..."
+                              : "Añadir"}
                           </button>
                           <button
                             onClick={() => {
-                              setActiveListId(null);
+                              setActiveListId(
+                                null
+                              );
                               setNewTaskTitle("");
-                              setNewTaskDescription("");
+                              setNewTaskDescription(
+                                ""
+                              );
                             }}
                             className="px-3 py-1 bg-dark-600 text-sm"
                           >
