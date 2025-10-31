@@ -1,9 +1,13 @@
 import { configureStore } from "@reduxjs/toolkit";
-import authReducer from "./authSlice";
+import authReducer from "./slices/authSlice";
+import workspaceSlice from "./slices/workspaceSlice";
+import sidebarSlice from "./slices/sidebarSlice";
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
+    workspace: workspaceSlice,
+    sidebar: sidebarSlice,
   },
 });
 

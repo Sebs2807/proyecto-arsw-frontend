@@ -1,51 +1,56 @@
-import { Routes, Route, useNavigate } from "react-router-dom";
+import { Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { useEffect } from "react";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector, useDispatch } from "react-redux";
 
 import { ProtectedRoute } from "./comoponents/ProtectedRoute";
-import LoginPage from "./comoponents/pages/login/LoginPage";
-import Dashboard from "./comoponents/pages/Dashboard";
-import RegisterPage from "./comoponents/pages/register/RegisterPage";
-import { checkAuth } from "./store/authSlice";
-import type { AppDispatch, RootState } from "./store";
+import LoginPage from "./comoponents/pages/login/Login";
+
+import { checkAuth } from "./store/slices/authSlice";
+import type { RootState, AppDispatch } from "./store";
+import MainLayout from "./comoponents/layouts/MainLayout";
+import Board from "./comoponents/pages/dashboard/Board";
+import Calendar from "./comoponents/pages/calendar/Calendar";
+import Assistant from "./comoponents/pages/assistant/Assistant";
+import Home from "./comoponents/pages/home/home";
 
 function App() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
-  const { loading, user, isAuthChecked } = useSelector(
-    (state: RootState) => state.auth
-  );
+  const location = useLocation();
+  const { user, isAuthChecked } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
     dispatch(checkAuth());
-    console.log("Checking auth status...");
   }, [dispatch]);
 
   useEffect(() => {
-    if (isAuthChecked && user) {
-      navigate("/dashboard");
+    if (!isAuthChecked) return;
+    if (user && (location.pathname === "/" || location.pathname === "/login")) {
+      navigate("/home", { replace: true });
     }
-  }, [isAuthChecked, user, navigate]);
+  }, [isAuthChecked, user, location.pathname, navigate]);
 
-  if (loading) {
-    return <div>Cargando sesión...</div>;
-  }
+  if (!isAuthChecked) return <div>Loading...</div>;
 
   return (
     <Routes>
+      {/* Rutas públicas */}
+      <Route path="/" element={<LoginPage />} />
       <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
 
       <Route
-        path="/dashboard"
+        path="/"
         element={
           <ProtectedRoute>
-            <Dashboard />
+            <MainLayout />
           </ProtectedRoute>
         }
-      />
-
-      <Route path="*" element={<LoginPage />} />
+      >
+        <Route path="home" element={<Home />} />
+        <Route path="boards" element={<Board />} />
+        <Route path="calendar" element={<Calendar />} />
+        <Route path="assistant" element={<Assistant />} />
+      </Route>
     </Routes>
   );
 }
