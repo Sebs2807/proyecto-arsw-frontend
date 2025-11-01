@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import { apiService } from "../../services/api/ApiService";
 
+// 🧩 Interfaces
 export interface Workspace {
   id: string;
   name: string;
@@ -9,16 +10,30 @@ export interface Workspace {
   updatedAt?: string;
 }
 
+export interface Board {
+  id: string;
+  title: string;
+  description?: string | null;
+  color?: string;
+  workspaceId?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// 🧠 Estado global
 interface WorkspaceState {
   workspaces: Workspace[];
   selectedWorkspace: Workspace | null;
+  selectedBoard: Board | null; // <--- Nuevo
 }
 
 const initialState: WorkspaceState = {
   workspaces: [],
   selectedWorkspace: null,
+  selectedBoard: null,
 };
 
+// 🚀 Thunk para cargar workspaces
 export const fetchWorkspaces = createAsyncThunk<Workspace[], void>(
   "workspace/fetchWorkspaces",
   async (_, { rejectWithValue }) => {
@@ -26,8 +41,6 @@ export const fetchWorkspaces = createAsyncThunk<Workspace[], void>(
       const response = await apiService.get<Workspace[]>("/v1/workspaces", {
         withCredentials: true,
       });
-
-      console.log(response);
       return response;
     } catch (error: any) {
       return rejectWithValue(error.response?.data || error.message);
@@ -47,6 +60,13 @@ const workspaceSlice = createSlice({
     },
     setSelectedWorkspace(state, action: PayloadAction<Workspace>) {
       state.selectedWorkspace = action.payload;
+      state.selectedBoard = null;
+    },
+    setSelectedBoard(state, action: PayloadAction<Board>) {
+      state.selectedBoard = action.payload;
+    },
+    clearSelectedBoard(state) {
+      state.selectedBoard = null;
     },
   },
   extraReducers: (builder) => {
@@ -59,5 +79,11 @@ const workspaceSlice = createSlice({
   },
 });
 
-export const { setWorkspaces, setSelectedWorkspace } = workspaceSlice.actions;
+export const {
+  setWorkspaces,
+  setSelectedWorkspace,
+  setSelectedBoard,
+  clearSelectedBoard,
+} = workspaceSlice.actions;
+
 export default workspaceSlice.reducer;
