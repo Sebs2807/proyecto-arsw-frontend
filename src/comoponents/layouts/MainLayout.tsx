@@ -48,7 +48,7 @@ const MainLayout: React.FC = () => {
         </div>
 
         {/* Contenido scrollable (Outlet) */}
-        <main className="flex-1 p-4 overflow-auto relative">
+        <main className="flex-1 p-4 overflow-auto relative scrollbar-custom">
           <Outlet />
         </main>
       </div>

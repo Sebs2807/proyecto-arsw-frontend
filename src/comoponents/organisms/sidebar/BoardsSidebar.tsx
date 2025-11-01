@@ -55,7 +55,7 @@ const BoardsSidebar: React.FC = () => {
   // Función de fetch de boards
   const fetchBoards = useCallback(
     async (pageNumber = 1, replace = false) => {
-      if (!WORKSPACE_ID) return;
+      if (!WORKSPACE_ID || loading) return;
       try {
         setLoading(true);
         setError(null);
@@ -93,7 +93,7 @@ const BoardsSidebar: React.FC = () => {
         setLoading(false);
       }
     },
-    [WORKSPACE_ID]
+    [WORKSPACE_ID, loading]
   );
 
   // Carga inicial
@@ -183,10 +183,6 @@ const BoardsSidebar: React.FC = () => {
             color={b.color || stringToColor(b.id)}
           />
         ))}
-
-        {loading && (
-          <p className="text-sm text-text-secondary text-center">Cargando...</p>
-        )}
 
         {error && <p className="text-sm text-red-400 text-center">{error}</p>}
 

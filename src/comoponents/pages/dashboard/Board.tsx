@@ -21,6 +21,10 @@ interface List {
   cards: Task[];
 }
 
+interface BoardProps {
+  boardId: string;
+}
+
 const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -29,7 +33,7 @@ const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   return ReactDOM.createPortal(children, portal ?? document.body);
 };
 
-const Board: React.FC = () => {
+const Board: React.FC<BoardProps> = ({ boardId }) => {
   const [lists, setLists] = React.useState<List[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -44,7 +48,7 @@ const Board: React.FC = () => {
   React.useEffect(() => {
     const fetchLists = async () => {
       try {
-        const data = await apiService.get<List[]>("/lists");
+        const data = await apiService.get<List[]>(`/lists?boardId=${boardId}`);
         setLists(data);
       } catch (err) {
         console.error("Error al cargar las listas:", err);
@@ -54,7 +58,7 @@ const Board: React.FC = () => {
       }
     };
     fetchLists();
-  }, []);
+  }, [boardId]);
 
   React.useEffect(() => {
     const socket: Socket = io("https://localhost:3000", {
@@ -63,10 +67,11 @@ const Board: React.FC = () => {
       rejectUnauthorized: false,
     });
 
-    socket.on("connect", () => console.log("🟢 Conectado a WebSocket"));
-    socket.on("disconnect", () => console.log("🔴 Desconectado de WebSocket"));
+    socket.on("connect", () => console.log("Conectado a WebSocket"));
+    socket.on("disconnect", () => console.log("Desconectado de WebSocket"));
 
     socket.on("list:created", (newList: List) => {
+      if ((newList as any).board?.id !== boardId) return;
       setLists((prev) => {
         const exists = prev.some((l) => l.id === newList.id);
         if (exists) return prev;
@@ -88,26 +93,24 @@ const Board: React.FC = () => {
 
     socket.on("card:created", ({ listId, card }) => {
       setLists((prev) =>
-        prev.map((l) => {
-          if (l.id !== listId) return l;
-          const exists = l.cards.some((c) => c.id === card.id);
-          if (exists) return l;
-          return { ...l, cards: [...l.cards, card] };
-        })
+        prev.map((l) =>
+          l.id === listId ? { ...l, cards: [...l.cards, card] } : l
+        )
       );
     });
 
     socket.on("card:updated", ({ listId, card }) => {
       setLists((prev) =>
-        prev.map((l) => {
-          if (l.id !== listId) return l;
-          return {
-            ...l,
-            cards: l.cards.map((c) =>
-              c.id === card.id ? { ...c, ...card } : c
-            ),
-          };
-        })
+        prev.map((l) =>
+          l.id === listId
+            ? {
+                ...l,
+                cards: l.cards.map((c) =>
+                  c.id === card.id ? { ...c, ...card } : c
+                ),
+              }
+            : l
+        )
       );
     });
 
@@ -115,18 +118,15 @@ const Board: React.FC = () => {
       setLists((prev) =>
         prev.map((l) =>
           l.id === listId
-            ? {
-                ...l,
-                cards: l.cards.filter((c) => c.id !== cardId),
-              }
+            ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
             : l
         )
       );
     });
 
     socket.on("card:moved", ({ sourceListId, destListId, card }) => {
-      setLists((prev) => {
-        const updated = prev.map((l) => {
+      setLists((prev) =>
+        prev.map((l) => {
           if (l.id === sourceListId) {
             return {
               ...l,
@@ -138,16 +138,15 @@ const Board: React.FC = () => {
             return { ...l, cards: [...l.cards, card] };
           }
           return l;
-        });
-        return updated;
-      });
+        })
+      );
     });
 
     return () => {
-      console.log("🧹 Cerrando conexión WebSocket...");
+      console.log("Cerrando conexión WebSocket...");
       socket.disconnect();
     };
-  }, []);
+  }, [boardId]);
 
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -193,6 +192,7 @@ const Board: React.FC = () => {
       await apiService.post<List>("/lists", {
         title: newListTitle,
         order: lists.length,
+        board: { id: boardId },
       });
       setNewListTitle("");
     } catch {
@@ -242,10 +242,19 @@ const Board: React.FC = () => {
     }
   };
 
-  const handleDeleteTask = async (taskId: string) => {
+  const handleDeleteTask = async (listId: string, taskId: string) => {
     if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
     try {
       await apiService.delete(`/v1/cards/${taskId}`);
+
+      // Actualiza el estado local para eliminar la tarea
+      setLists((prev) =>
+        prev.map((l) =>
+          l.id === listId
+            ? { ...l, cards: l.cards.filter((c) => c.id !== taskId) }
+            : l
+        )
+      );
     } catch {
       alert("Error al eliminar la tarea");
     }
@@ -278,7 +287,7 @@ const Board: React.FC = () => {
       </div>
 
       <DragDropContext onDragEnd={handleDragEnd}>
-        <div className="flex flex-row gap-6 overflow-x-auto flex-1">
+        <div className="flex flex-row gap-6 overflow-x-auto flex-1 scrollbar-custom">
           {lists.map((list) => (
             <Droppable droppableId={list.id} key={list.id}>
               {(provided) => (
@@ -325,7 +334,7 @@ const Board: React.FC = () => {
                     )}
                   </div>
 
-                  <div className="flex-1 flex flex-col gap-3">
+                  <div className="flex-1 flex flex-col gap-3 overflow-y-auto scrollbar-custom">
                     {list.cards.map((task, index) => (
                       <Draggable
                         key={task.id}
@@ -352,7 +361,9 @@ const Board: React.FC = () => {
                               </p>
 
                               <button
-                                onClick={() => handleDeleteTask(task.id)}
+                                onClick={() =>
+                                  handleDeleteTask(list.id, task.id)
+                                }
                                 className="absolute top-2 right-2 text-text-muted hover:text-red-400 transition-colors"
                               >
                                 <Trash2 size={14} />
