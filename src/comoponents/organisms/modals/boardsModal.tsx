@@ -10,6 +10,7 @@ interface Board {
   title: string;
   description?: string;
   color: string;
+  members?: UserSuggestion[];
 }
 
 interface BoardsModalProps {
@@ -62,14 +63,20 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
   const workspaceId = selectedWorkspace?.id ?? "";
 
   useEffect(() => {
+    console.log(board);
     if (board && (isEditing || isDeleting)) {
       setTitle(board.title);
       setDescription(board.description || "");
       setSelectedColor(board.color);
+
+      if (board.members) {
+        setSelectedUsers(board.members);
+      }
     } else {
       setTitle("");
       setDescription("");
       setSelectedColor("#a1a1a1");
+      setSelectedUsers([]);
     }
   }, [board, isEditing, isDeleting]);
 
@@ -81,9 +88,21 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
     try {
       const response: AutocompleteResponse = await apiService.get(
         `/v1/users/autocomplete`,
-        { params: { search: query, workspaceId } }
+        {
+          params: {
+            search: query,
+            workspaceId,
+            excludeWorkspaceMembers: false,
+          },
+        }
       );
-      setSuggestions(response.items ?? []);
+
+      // Filtrar usuarios que ya están en selectedUsers
+      const filtered = response.items.filter(
+        (user) => !selectedUsers.some((u) => u.id === user.id)
+      );
+
+      setSuggestions(filtered);
     } catch {
       setSuggestions([]);
     }
@@ -112,27 +131,26 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
     if (!isFormValid()) return;
 
     setLoading(true);
+
+    const updateData = {
+      title: title.trim() || undefined,
+      description: description.trim() || undefined,
+      color: selectedColor || undefined,
+      memberIds: selectedUsers.map((u) => u.id) || undefined,
+    };
+
     try {
       if (isDeleting && board) {
-        await apiService.delete(
-          `/v1/workspaces/${workspaceId}/boards/${board.id}`
-        );
+        await apiService.delete(`/v1/boards/${board.id}`);
       } else if (isEditing && board) {
-        await apiService.patch(
-          `/v1/workspaces/${workspaceId}/boards/${board.id}`,
-          {
-            title,
-            description,
-            color: selectedColor,
-            users: selectedUsers.map((u) => u.id),
-          }
-        );
+        await apiService.patch(`/v1/boards/${board.id}`, updateData);
       } else {
-        await apiService.post(`/v1/workspaces/${workspaceId}/boards`, {
-          title,
-          description,
+        await apiService.post(`/v1/boards`, {
+          title: title.trim(),
+          description: description.trim(),
           color: selectedColor,
-          users: selectedUsers.map((u) => u.id),
+          memberIds: selectedUsers.map((u) => u.id),
+          workspaceId,
         });
       }
 
@@ -261,7 +279,7 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
                     <div
                       key={user.id}
                       onClick={() => handleSelectSuggestion(user)}
-                      className="px-3 py-2 text-sm text-white hover:bg-dark-600 cursor-pointer"
+                      className="px-3 py-2 text-sm text-white hover:bg-dark-700 cursor-pointer"
                     >
                       {user.firstName} {user.lastName} – {user.email}
                     </div>

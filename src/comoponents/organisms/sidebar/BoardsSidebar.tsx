@@ -60,16 +60,28 @@ const BoardsSidebar: React.FC = () => {
         setLoading(true);
         setError(null);
 
-        const data = await apiService.get<{ items: Board[]; total?: number }>(
+        const response = await apiService.get<{
+          items: Board[];
+          total?: number;
+        }>(
           `/v1/boards/paginated?page=${pageNumber}&limit=${LIMIT}&workspaceId=${WORKSPACE_ID}`
         );
 
-        const boardsData = Array.isArray(data) ? data : data?.items ?? [];
+        const boardsData = Array.isArray(response)
+          ? response
+          : response?.items ?? [];
 
         if (replace) {
           setBoards(boardsData);
         } else {
-          setBoards((prev) => [...prev, ...boardsData]);
+          setBoards((prev) => {
+            // Combinar y eliminar duplicados por ID
+            const combined = [...prev, ...boardsData];
+            const uniqueBoards = combined.filter(
+              (b, index, self) => index === self.findIndex((x) => x.id === b.id)
+            );
+            return uniqueBoards;
+          });
         }
 
         setHasMore(boardsData.length === LIMIT);
