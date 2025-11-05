@@ -5,8 +5,8 @@ import {
   format,
   setHours,
   setMinutes,
-  isSameDay,
 } from "date-fns";
+import { apiService } from "../../../services/api/ApiService";
 
 interface CalendarEvent {
   id: string;
@@ -21,66 +21,103 @@ const WeeklyCalendar: React.FC = () => {
   const [events, setEvents] = React.useState<CalendarEvent[]>([]);
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 }); // Domingo
+  const weekEnd = addDays(weekStart, 7); // Fin exclusivo (sábado 23:59)
   const daysOfWeek = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const hours = Array.from({ length: 12 }, (_, i) => i + 7); // 7am - 6pm
 
+  // Fetch de eventos solo de la semana visible
+  const fetchEventsForWeek = async (start: Date, end: Date): Promise<CalendarEvent[]> => {
+    try {
+      const params = new URLSearchParams({
+        start: start.toISOString(),
+        end: end.toISOString(),
+      });
+      const relativeUrl = `/v1/calendar/google-events?${params.toString()}`;
+
+      const data = await apiService.get<any>(relativeUrl);
+      const apiEvents: any[] = data?.events || data?.items || data || [];
+
+      const parseDate = (d: any): Date | null => {
+        if (!d) return null;
+        if (typeof d === "string") {
+          const dt = new Date(d);
+          return isNaN(dt.getTime()) ? null : dt;
+        }
+        if (d.dateTime) {
+          const dt = new Date(d.dateTime);
+          return isNaN(dt.getTime()) ? null : dt;
+        }
+        if (d.date) {
+          const dt = new Date(d.date);
+          return isNaN(dt.getTime()) ? null : dt;
+        }
+        return null;
+      };
+
+      const mapped: CalendarEvent[] = (apiEvents || [])
+        .map((ev: any, idx: number) => {
+          const id = ev.id || ev.eventId || `evt-${idx}`;
+          const title = ev.summary || ev.title || ev.name || "Sin título";
+
+          const start = parseDate(
+            ev.start || ev.startDate || ev.start_time || ev.startDateTime
+          );
+          const end =
+            parseDate(
+              ev.end || ev.endDate || ev.end_time || ev.endDateTime
+            ) ||
+            (start
+              ? new Date(start.getTime() + 60 * 60 * 1000)
+              : null);
+
+          const color =
+            ev.color || (ev.colorId ? `color-${ev.colorId}` : undefined);
+
+          if (!start || !end) return null;
+
+          return { id, title, start, end, color };
+        })
+        .filter(Boolean) as CalendarEvent[];
+
+      setEvents(mapped);
+      return mapped;
+    } catch (error) {
+      console.error("Error fetching weekly events:", error);
+      setEvents([]);
+      return [];
+    }
+  };
+
+  // Carga inicial (semana actual)
   React.useEffect(() => {
-    // Fechas absolutas hardcodeadas:
-    const mockEvents: CalendarEvent[] = [
-      {
-        id: "1",
-        title: "Reunión de equipo",
-        start: new Date("2025-10-19T09:00:00"), // Domingo 19 Oct 2025, 9am
-        end: new Date("2025-10-19T10:00:00"),
-        color: "bg-limeyellow-400",
-      },
-      {
-        id: "2",
-        title: "Llamada cliente",
-        start: new Date("2025-10-21T14:00:00"), // Martes 21 Oct 2025, 2pm
-        end: new Date("2025-10-21T15:00:00"),
-        color: "bg-indigo-400",
-      },
-      {
-        id: "3",
-        title: "Planificación semanal",
-        start: new Date("2025-10-20T10:00:00"), // Lunes 20 Oct 2025, 10am
-        end: new Date("2025-10-20T11:00:00"),
-        color: "bg-rose-400",
-      },
-      {
-        id: "4",
-        title: "Code Review",
-        start: new Date("2025-10-23T16:00:00"), // Jueves 23 Oct 2025, 4pm
-        end: new Date("2025-10-23T17:00:00"),
-        color: "bg-cyan-400",
-      },
-      {
-        id: "5",
-        title: "Presentación al cliente",
-        start: new Date("2025-10-24T11:00:00"), // Viernes 24 Oct 2025, 11am
-        end: new Date("2025-10-24T12:00:00"),
-        color: "bg-yellow-400",
-      },
-      {
-        id: "6",
-        title: "Reunión planificación Q4",
-        start: new Date("2025-11-02T09:00:00"), // Domingo 2 Nov 2025, 9am (otra semana)
-        end: new Date("2025-11-02T10:00:00"),
-        color: "bg-purple-400",
-      },
-    ];
+    fetchEventsForWeek(weekStart, weekEnd);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWeek]);
 
-    setEvents(mockEvents);
-  }, []);
+  // Cambiar semana anterior / siguiente
+  const goToPreviousWeek = () => setCurrentWeek((prev) => addDays(prev, -7));
+  const goToNextWeek = () => setCurrentWeek((prev) => addDays(prev, 7));
 
-  const goToPreviousWeek = () => {
-    setCurrentWeek((prev) => addDays(prev, -7));
-  };
+  // Filtrar eventos dentro de la semana actual
+  const eventsForWeek = events.filter(
+    (e) => e.start < weekEnd && e.end > weekStart
+  );
 
-  const goToNextWeek = () => {
-    setCurrentWeek((prev) => addDays(prev, 7));
-  };
+  // 🔹 Calcular hora mínima y máxima con eventos
+  const minHour =
+    eventsForWeek.length > 0
+      ? Math.max(0, Math.min(...eventsForWeek.map((e) => e.start.getHours())))
+      : 0;
+
+  const maxHour =
+    eventsForWeek.length > 0
+      ? Math.min(23, Math.max(...eventsForWeek.map((e) => e.end.getHours())))
+      : 23;
+
+  // 🔹 Generar solo las horas necesarias
+  const visibleHours = Array.from(
+    { length: maxHour - minHour + 1 },
+    (_, i) => i + minHour
+  );
 
   return (
     <div className="bg-dark-900 min-h-screen p-6 text-text-primary font-poppins">
@@ -91,9 +128,11 @@ const WeeklyCalendar: React.FC = () => {
         >
           ← Semana anterior
         </button>
+
         <h2 className="text-xl font-semibold text-text-secondary">
           Semana del {format(weekStart, "dd MMM yyyy")}
         </h2>
+
         <button
           onClick={goToNextWeek}
           className="px-3 py-1 bg-dark-700 rounded hover:bg-dark-600"
@@ -115,16 +154,18 @@ const WeeklyCalendar: React.FC = () => {
           </div>
         ))}
 
-        {hours.map((hour) => (
+        {visibleHours.map((hour) => (
           <React.Fragment key={hour}>
             <div className="bg-dark-900 border-r border-t border-dark-600 text-text-muted p-2 text-right pr-4">
               {format(setHours(new Date(), hour), "h a")}
             </div>
 
             {daysOfWeek.map((day, i) => {
-              const event = events.find(
-                (e) =>
-                  isSameDay(e.start, day) && e.start.getHours() === hour
+              const slotStart = setMinutes(setHours(day, hour), 0);
+              const slotEnd = setMinutes(setHours(day, hour + 1), 0);
+
+              const eventsInSlot = eventsForWeek.filter(
+                (e) => e.start < slotEnd && e.end > slotStart
               );
 
               return (
@@ -132,13 +173,21 @@ const WeeklyCalendar: React.FC = () => {
                   key={`${i}-${hour}`}
                   className="relative border-r border-t border-dark-700 h-16 bg-dark-800 hover:bg-dark-700 transition"
                 >
-                {event && (
-                  <div
-                    className={`absolute inset-1 text-sm font-medium rounded p-1 shadow-md text-dark-900 ${event.color || "bg-limeyellow-400"}`}
-                  >
-                    {event.title}
-                  </div>
-                )}
+                  {eventsInSlot.length > 0 && (
+                    <div className="absolute inset-1 flex flex-col gap-1 overflow-auto max-h-full">
+                      {eventsInSlot.map((ev) => (
+                        <div
+                          key={ev.id}
+                          className={`text-xs font-medium rounded px-1 py-0.5 shadow-md truncate text-dark-900 ${
+                            ev.color || "bg-limeyellow-400"
+                          }`}
+                          title={ev.title}
+                        >
+                          {ev.title}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
