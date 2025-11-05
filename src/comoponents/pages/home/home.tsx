@@ -3,8 +3,8 @@ import { useSelector } from "react-redux";
 import type { RootState } from "../../../store";
 
 // Importa ambos gestores
-import MembersManager from "./../../MembersManager";
-import BoardsManager from "./../../BoardsManager";
+import MembersManager from "../../MembersManager";
+import BoardsManager from "../../BoardsManager";
 
 const Home: React.FC = () => {
   const { activeItem } = useSelector((state: RootState) => state.sidebar);

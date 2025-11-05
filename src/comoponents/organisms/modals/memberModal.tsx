@@ -117,8 +117,8 @@ const MembersModal: React.FC<MembersModalProps> = ({
     try {
       if (isDeleting && member) {
         // Eliminar usuario del workspace usando userId y workspaceId
-        await apiService.delete(`/v1/workspaces/users/${member.id}`, {
-          data: { workspaceId },
+        await apiService.delete(`/v1/workspaces/users/`, {
+          data: { userId: member.id, workspaceId },
         });
       } else if (isEditing && member) {
         // Actualizar rol del usuario en el workspace usando userId y workspaceId

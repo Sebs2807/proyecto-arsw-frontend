@@ -12,6 +12,7 @@ import Board from "./comoponents/pages/dashboard/Board";
 import Calendar from "./comoponents/pages/calendar/Calendar";
 import Assistant from "./comoponents/pages/assistant/Assistant";
 import Home from "./comoponents/pages/home/home";
+import LivekitPageWrapper from "./comoponents/pages/livekit/LivekitPageWrapper";
 
 function App() {
   const dispatch = useDispatch<AppDispatch>();
@@ -50,6 +51,7 @@ function App() {
         <Route path="boards" element={<Board />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="assistant" element={<Assistant />} />
+        <Route path="livekit/:room/:token" element={<LivekitPageWrapper />} />
       </Route>
     </Routes>
   );

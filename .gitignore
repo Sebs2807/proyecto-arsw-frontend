@@ -12,7 +12,8 @@ dist
 dist-ssr
 *.local
 .env
-/certs
+/certs/*
+/coverage/*
 
 # Editor directories and files
 .vscode/*

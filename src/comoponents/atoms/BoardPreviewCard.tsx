@@ -2,17 +2,20 @@ import React from "react";
 
 interface BoardPreviewCardProps {
   title: string;
-  isActive?: boolean;
   color?: string;
+  isActive?: boolean;
+  onClick?: () => void;
 }
 
 const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
   title,
-  isActive = false,
   color = "#1A1A3D",
+  isActive = false,
+  onClick,
 }) => {
   return (
     <div
+      onClick={onClick}
       className={`
         relative flex items-center justify-end w-full h-[120px] flex-shrink-0 rounded-xl overflow-hidden cursor-pointer
         border transition-all duration-300 ease-in-out transform
@@ -22,11 +25,10 @@ const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
             : "border-dark-600 hover:border-limeyellow-500/40 hover:shadow-[0_0_12px_rgba(124,106,247,0.3)] hover:scale-[1.02]"
         }
       `}
-      style={{
-        backgroundColor: color,
-      }}
+      style={{ backgroundColor: color }}
     >
       <div className="absolute inset-0 bg-black/20 pointer-events-none"></div>
+
       <div
         className={`absolute bottom-2 right-3 text-text-primary text-sm font-poppins font-medium tracking-wide z-10 drop-shadow-md transition-all ${
           isActive
@@ -36,9 +38,11 @@ const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
       >
         {title}
       </div>
+
       {isActive && (
         <div className="absolute inset-0 rounded-xl border-[2px] border-limeyellow-500 animate-pulse pointer-events-none"></div>
       )}
+
       <div className="absolute inset-0 pointer-events-none shadow-inner shadow-black/40"></div>
     </div>
   );

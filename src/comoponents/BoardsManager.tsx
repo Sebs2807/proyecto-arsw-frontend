@@ -15,7 +15,18 @@ import ChevronLeftIcon from "../assets/chevron-left.svg?react";
 import ChevronRightIcon from "../assets/chevron-right.svg?react";
 import ChevronDownIcon from "../assets/chevron-down.svg?react";
 import ChevronUpIcon from "../assets/chevron-up.svg?react";
-//import BoardModal from "./organisms/modals/boardModal"; // Modal similar al de members
+import BoardsModal from "./organisms/modals/boardsModal";
+
+interface UserDto {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  picture?: string;
+  role: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 interface Board {
   id: string;
@@ -24,12 +35,7 @@ interface Board {
   color: string;
   createdAt: string;
   updatedAt: string;
-  members?: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-  }[];
+  members?: UserDto[];
 }
 
 interface TransformedRow {
@@ -39,6 +45,7 @@ interface TransformedRow {
   color: string;
   createdAt: string;
   updatedAt: string;
+  members: UserDto[];
 }
 
 interface PaginatedResponse<T> {
@@ -56,7 +63,8 @@ const BoardsManager: React.FC = () => {
     (state: RootState) => state.workspace.selectedWorkspace?.id
   );
 
-  const [data, setData] = useState<TransformedRow[]>([]);
+  const [boards, setBoards] = useState<Board[]>([]); // Datos completos
+  const [data, setData] = useState<TransformedRow[]>([]); // Solo para la tabla
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -89,6 +97,7 @@ const BoardsManager: React.FC = () => {
           color: b.color,
           createdAt: new Date(b.createdAt).toLocaleDateString(),
           updatedAt: new Date(b.updatedAt).toLocaleDateString(),
+          members: b.members || [],
         })),
       title: "Boards",
       description: "View and manage workspace boards.",
@@ -113,29 +122,19 @@ const BoardsManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const handleEdit = (item: TransformedRow) => {
+  const handleEdit = (row: TransformedRow) => {
+    const board = boards.find((b) => b.id === row.id);
+    if (!board) return;
     setModalMode("edit");
-    setModalBoard({
-      id: item.id,
-      title: item.title,
-      description: item.description,
-      color: item.color,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-    });
+    setModalBoard(board);
     setIsModalOpen(true);
   };
 
-  const handleDelete = (item: TransformedRow) => {
+  const handleDelete = (row: TransformedRow) => {
+    const board = boards.find((b) => b.id === row.id);
+    if (!board) return;
     setModalMode("delete");
-    setModalBoard({
-      id: item.id,
-      title: item.title,
-      description: item.description,
-      color: item.color,
-      createdAt: item.createdAt,
-      updatedAt: item.updatedAt,
-    });
+    setModalBoard(board);
     setIsModalOpen(true);
   };
 
@@ -155,7 +154,7 @@ const BoardsManager: React.FC = () => {
         signal: abortController.signal,
       });
 
-      console.log(response);
+      setBoards(response.items || []);
       setData(CONFIG.transform(response.items || []));
       setTotalItems(response.total ?? 0);
       setTotalPages(response.totalPages ?? 1);
@@ -163,6 +162,7 @@ const BoardsManager: React.FC = () => {
       if (error.name !== "CanceledError") {
         console.error(`Error fetching ${CONFIG.title}:`, error);
         setData([]);
+        setBoards([]);
       }
     } finally {
       setLoading(false);
@@ -348,7 +348,16 @@ const BoardsManager: React.FC = () => {
                               </td>
                             ) : (
                               <td key={key as string} className="px-4 py-3">
-                                {row[key] || "-"}
+                                {key === "members"
+                                  ? row.members.map((m) => (
+                                      <span
+                                        key={m.id}
+                                        className="inline-block bg-dark-600 text-text-primary text-xs px-2 py-1 mr-1 rounded"
+                                      >
+                                        {m.firstName} {m.lastName}
+                                      </span>
+                                    ))
+                                  : row[key] || "-"}
                               </td>
                             )
                           )}
@@ -403,13 +412,13 @@ const BoardsManager: React.FC = () => {
         )}
       </div>
 
-      {/* <BoardModal
+      <BoardsModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchData}
         board={modalBoard}
         mode={modalMode}
-      /> */}
+      />
     </div>
   );
 };

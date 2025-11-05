@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { X } from "lucide-react";
 
 interface ModalProps {
   isOpen: boolean;
@@ -33,9 +34,10 @@ const ModalBase: React.FC<ModalProps> = ({
       >
         <button
           onClick={onClose}
-          className="absolute top-3 right-3 text-text-muted hover:text-text-secondary transition"
+          aria-label="Cerrar"
+          className="absolute top-3 right-3 p-1 rounded-full text-text-muted hover:text-text-secondary transition"
         >
-          X
+          <X size={18} />
         </button>
 
         {title && (
