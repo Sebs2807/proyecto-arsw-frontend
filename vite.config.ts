@@ -1,4 +1,4 @@
-import { defineConfig } from "vite";
+import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import svgr from "vite-plugin-svgr";
 import fs from "fs";
@@ -19,6 +19,19 @@ const httpsOptions =
 
 export default defineConfig({
   plugins: [react(), svgr()],
+  test: {
+    globals: true,
+    testTimeout: 10000,
+    hookTimeout: 10000,
+    environment: "jsdom",
+    setupFiles: "./test/setup.ts",
+    css: true,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html"],
+      reportsDirectory: "./coverage",
+  },
+  },
   server: {
     https: httpsOptions,
     host: true,

@@ -64,8 +64,16 @@ type CardDragEndCallback = (cardId: string, user: string) => void;
 // ──────────────────────────────────────────────
 
 class ApiService {
+    updateList: vi.Mock;
+    deleteList(deleteList: any) {
+        throw new Error("Method not implemented.");
+    }
+    createList(createList: any) {
+        throw new Error("Method not implemented.");
+    }
 	private axiosInstance: AxiosInstance;
 	public socket: Socket | null = null;
+    getListsByBoardId: vi.Mock;
 
 	constructor(baseURL: string) {
 		this.axiosInstance = axios.create({
