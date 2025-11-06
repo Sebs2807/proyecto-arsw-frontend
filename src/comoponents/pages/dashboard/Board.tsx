@@ -8,6 +8,8 @@ import { useSelector } from "react-redux";
 import type { RootState } from "../../../store";
 import { useNavigate } from "react-router-dom";
 import ModalBase from "../../atoms/ModalBase";
+import { RiCalendarScheduleFill } from "react-icons/ri";
+import { IoIosSend } from "react-icons/io";
 import { FaPhone } from "react-icons/fa";
 
 
@@ -148,10 +150,8 @@ const Board: React.FC = () => {
         ),
   (_sourceListId, destListId, card) =>
         setLists((prev) => {
-          // Remove the card from any list where it exists
           const withoutCard = prev.map((l) => ({ ...l, cards: l.cards.filter((c) => c.id !== card.id) }));
 
-          // Insert or replace the card in the destination list
           return withoutCard.map((l) =>
             l.id === destListId ? { ...l, cards: [...l.cards, card] } : l
           );
@@ -313,6 +313,79 @@ const Board: React.FC = () => {
       navigate(`/livekit/${roomId}/${token}`);
     } catch (err) {
       console.error("Error al generar token de LiveKit:", err);
+    }
+  };
+
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
+  const [scheduleDateTime, setScheduleDateTime] = React.useState<string>(new Date().toISOString().slice(0,16));
+  const [scheduleDurationMinutes, setScheduleDurationMinutes] = React.useState<number>(30);
+  const [scheduleAttendees, setScheduleAttendees] = React.useState<string>("");
+  const [isScheduling, setIsScheduling] = React.useState(false);
+  const [scheduledLinks, setScheduledLinks] = React.useState<{ htmlLink?: string; googleAddUrl?: string; icsUrl?: string; shareLink?: string } | null>(null);
+  const [copied, setCopied] = React.useState(false);
+  const [scheduleRoomId, setScheduleRoomId] = React.useState<string | null>(null);
+
+  const formatForGoogleDates = (d: Date) => {
+    return d.toISOString().replace(/-|:|\.\d{3}/g, "");
+  };
+
+  const generateICS = (opts: { uid: string; title: string; description?: string; start: Date; end: Date; url?: string; attendees?: string[] }) => {
+    const { uid, title, description = "", start, end, url = "", attendees = [] } = opts;
+    const dtstamp = new Date().toISOString().replace(/-|:|\.\d{3}/g, "");
+    const dtstart = start.toISOString().replace(/-|:|\.\d{3}/g, "");
+    const dtend = end.toISOString().replace(/-|:|\.\d{3}/g, "");
+    const attendeesLines = attendees.map(a => `ATTENDEE:mailto:${a}`).join("\r\n");
+    const ics = [`BEGIN:VCALENDAR`,`VERSION:2.0`,`PRODID:-//Synapse//EN`,`CALSCALE:GREGORIAN`,`BEGIN:VEVENT`,
+      `UID:${uid}`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART:${dtstart}`,
+      `DTEND:${dtend}`,
+      `SUMMARY:${title}`,
+      `DESCRIPTION:${description}`,
+      attendeesLines,
+      url ? `URL:${url}` : "",
+      `END:VEVENT`,`END:VCALENDAR`].filter(Boolean).join("\r\n");
+    return ics;
+  };
+
+  const createCalendarEvent = async (opts: { title: string; description?: string; start: Date; end: Date; attendees?: string[] }) => {
+    setIsScheduling(true);
+    try {
+      const payload = {
+        summary: opts.title,
+        description: opts.description,
+        start: { dateTime: opts.start.toISOString() },
+        end: { dateTime: opts.end.toISOString() },
+        attendees: (opts.attendees || []).map(e => ({ email: e })),
+      };
+
+      const resp = await apiService.post<any>(`/v1/calendar/google-events`, payload);
+
+      const created = resp && (resp.data || resp) ? (resp.data || resp) : resp;
+      const htmlLink: string | undefined = created?.htmlLink || created?.data?.htmlLink || created?.result?.htmlLink;
+
+      const googleDates = `${formatForGoogleDates(opts.start)}/${formatForGoogleDates(opts.end)}`;
+      const addUrl = new URL('https://calendar.google.com/calendar/render');
+      addUrl.searchParams.set('action', 'TEMPLATE');
+      addUrl.searchParams.set('text', opts.title);
+      if (opts.description) addUrl.searchParams.set('details', opts.description);
+      addUrl.searchParams.set('dates', googleDates);
+      if (opts.attendees && opts.attendees.length) addUrl.searchParams.set('add', opts.attendees.join(','));
+
+      const uid = created?.id || `synapse-${Date.now()}`;
+      const ics = generateICS({ uid, title: opts.title, description: opts.description, start: opts.start, end: opts.end, url: htmlLink, attendees: opts.attendees });
+      const blob = new Blob([ics], { type: 'text/calendar' });
+      const icsUrl = URL.createObjectURL(blob);
+
+  const shareLink = htmlLink || addUrl.toString();
+  setScheduledLinks({ htmlLink, googleAddUrl: addUrl.toString(), icsUrl, shareLink });
+
+      return { htmlLink, googleAddUrl: addUrl.toString(), icsUrl };
+    } catch (err) {
+      console.error('Error creando evento en calendario:', err);
+      throw err;
+    } finally {
+      setIsScheduling(false);
     }
   };
 
@@ -671,15 +744,18 @@ const Board: React.FC = () => {
       </button>
 
       <div className="flex gap-2 items-center">
-        {/* Botón LiveKit (sin fondo) */}
         <button
-          onClick={async () => {
+          onClick={() => {
             if (!editingTask) return;
-            await handleLiveKit(editingTask.id);
+            setScheduleRoomId(editingTask.id);
+            setScheduleDateTime(new Date().toISOString().slice(0,16));
+            setScheduleAttendees("");
+            setScheduledLinks(null);
+            setIsScheduleModalOpen(true);
           }}
           className="px-2 py-1 text-text-accent hover:text-text-secondary rounded transition flex items-center gap-2"
         >
-          <FaPhone size={16} /> Llamada
+          <RiCalendarScheduleFill size={16}/> Agendar Llamada
         </button>
 
         <button
@@ -695,13 +771,11 @@ const Board: React.FC = () => {
             const editingId = editingTask.id;
             setIsSaving(true);
             try {
-              // Try to update on server and prefer returned updated card if provided
               const resp = await apiService.put<Partial<Task>>(`/v1/cards/${editingId}`, {
                 title: modalTitle,
                 description: modalDescription,
               });
 
-              // If API returns the updated card, use it; otherwise fallback to our local values
               const updatedCard = resp && (resp as any).data ? (resp as any).data : { id: editingId, title: modalTitle, description: modalDescription };
 
               setLists((prev) =>
@@ -733,8 +807,144 @@ const Board: React.FC = () => {
   </div>
 </ModalBase>
 
+    {/* Scheduling modal */}
+    <ModalBase
+      isOpen={isScheduleModalOpen}
+      onClose={() => {
+        if (scheduledLinks?.icsUrl) try { URL.revokeObjectURL(scheduledLinks.icsUrl); } catch {};
+        setIsScheduleModalOpen(false);
+        setScheduledLinks(null);
+        setScheduleRoomId(null);
+      }}
+      title={"Agendar llamada"}
+      width="max-w-lg"
+    >
+      <div className="space-y-4 mt-2">
+        <label className="block text-sm text-text-muted">Fecha y hora</label>
+        <input
+          type="datetime-local"
+          value={scheduleDateTime}
+          onChange={(e) => setScheduleDateTime(e.target.value)}
+          className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+        />
+
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="block text-sm text-text-muted">Duración (min)</label>
+            <input
+              type="number"
+              value={scheduleDurationMinutes}
+              onChange={(e) => setScheduleDurationMinutes(Number(e.target.value || 0))}
+              className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+              min={1}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm text-text-muted">Asistentes (coma-separado)</label>
+            <input
+              type="text"
+              value={scheduleAttendees}
+              onChange={(e) => setScheduleAttendees(e.target.value)}
+              className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+              placeholder="ej: a@ejemplo.com, b@ejemplo.com"
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end">
+          <button
+            onClick={async () => {
+              try {
+                const start = new Date(scheduleDateTime);
+                const end = new Date(start.getTime() + scheduleDurationMinutes * 60 * 1000);
+                const attendees = scheduleAttendees.split(',').map(s=>s.trim()).filter(Boolean);
+                await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
+              } catch (err) {
+                alert('Error creando invitación. Revisa la consola.');
+              }
+            }}
+            disabled={isScheduling}
+            className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-limeyellow-500 text-white rounded-lg"
+          >
+            {isScheduling ? 'Creando...' : <> Crear invitación <IoIosSend /></>}
+          </button>
+
+          <button
+            onClick={async () => {
+              try {
+                const start = new Date(scheduleDateTime);
+                const end = new Date(start.getTime() + scheduleDurationMinutes * 60 * 1000);
+                const attendees = scheduleAttendees.split(',').map(s=>s.trim()).filter(Boolean);
+                await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
+                if (scheduleRoomId) {
+                  await handleLiveKit(scheduleRoomId);
+                }
+              } catch (err) {
+                alert('Error creando invitación o iniciando llamada.');
+              }
+            }}
+            disabled={isScheduling}
+            className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-dark-600 text-text-primary rounded-lg"
+          >
+            {isScheduling ? 'Procesando...' : <>Crear llamada <FaPhone /></>}
+          </button>
+
+          <button
+            onClick={() => {
+              if (scheduledLinks?.icsUrl) try { URL.revokeObjectURL(scheduledLinks.icsUrl); } catch {};
+              setIsScheduleModalOpen(false);
+              setScheduledLinks(null);
+              setScheduleRoomId(null);
+            }}
+            className="px-3 py-1 bg-dark-700 text-text-muted rounded-lg"
+          >Cerrar</button>
+        </div>
+
+        {scheduledLinks && (
+          <div className="mt-3 p-3 bg-dark-800 rounded border border-dark-600">
+            {scheduledLinks.htmlLink && (
+              <div className="mb-2">
+                <a href={scheduledLinks.htmlLink} target="_blank" rel="noreferrer" className="text-limeyellow-400 underline">Abrir evento en Google Calendar (creado)</a>
+              </div>
+            )}
+            {scheduledLinks.shareLink && (
+              <div className="mb-2 flex items-center gap-3">
+                <input
+                  type="text"
+                  readOnly
+                  value={scheduledLinks.shareLink}
+                  className="flex-1 p-2 rounded bg-dark-900 text-sm border border-dark-600"
+                />
+                <button
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(scheduledLinks.shareLink || '');
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    } catch (e) {
+                      const el = document.createElement('textarea');
+                      el.value = scheduledLinks.shareLink || '';
+                      document.body.appendChild(el);
+                      el.select();
+                      document.execCommand('copy');
+                      document.body.removeChild(el);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }
+                  }}
+                  className="px-3 py-1 bg-limeyellow-500 text-white rounded"
+                >Copiar</button>
+                {copied && <span className="text-sm text-text-muted">Copiado</span>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </ModalBase>
+
     </div>
   );
 };
 
 export default Board;
+

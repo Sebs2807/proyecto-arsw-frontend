@@ -19,12 +19,12 @@ interface CalendarEvent {
 const WeeklyCalendar: React.FC = () => {
   const [currentWeek, setCurrentWeek] = React.useState<Date>(new Date());
   const [events, setEvents] = React.useState<CalendarEvent[]>([]);
+  const cacheRef = React.useRef<Record<string, CalendarEvent[]>>({});
 
-  const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 }); // Domingo
-  const weekEnd = addDays(weekStart, 7); // Fin exclusivo (sábado 23:59)
+  const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 });
+  const weekEnd = addDays(weekStart, 7);
   const daysOfWeek = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  // Fetch de eventos solo de la semana visible
   const fetchEventsForWeek = async (start: Date, end: Date): Promise<CalendarEvent[]> => {
     try {
       const params = new URLSearchParams({
@@ -78,31 +78,60 @@ const WeeklyCalendar: React.FC = () => {
         })
         .filter(Boolean) as CalendarEvent[];
 
-      setEvents(mapped);
       return mapped;
     } catch (error) {
       console.error("Error fetching weekly events:", error);
-      setEvents([]);
       return [];
     }
   };
 
-  // Carga inicial (semana actual)
+  const getWeekKey = (d: Date) => startOfWeek(d, { weekStartsOn: 0 }).toISOString();
+
+  const prefetchWeek = async (weekStartDate: Date) => {
+    const key = getWeekKey(weekStartDate);
+    if (cacheRef.current[key]) return;
+    const start = startOfWeek(weekStartDate, { weekStartsOn: 0 });
+    const end = addDays(start, 7);
+    try {
+      const mapped = await fetchEventsForWeek(start, end);
+      cacheRef.current[key] = mapped;
+    } catch (err) {
+      console.warn("Prefetch failed for", key, err);
+    }
+  };
+
+  const loadWeek = async (anyDateInWeek: Date) => {
+    const weekStart = startOfWeek(anyDateInWeek, { weekStartsOn: 0 });
+    const key = weekStart.toISOString();
+
+    if (cacheRef.current[key]) {
+      setEvents(cacheRef.current[key]);
+      prefetchWeek(addDays(weekStart, -7));
+      prefetchWeek(addDays(weekStart, 7));
+      return;
+    }
+
+    const start = weekStart;
+    const end = addDays(start, 7);
+    const mapped = await fetchEventsForWeek(start, end);
+    cacheRef.current[key] = mapped;
+    setEvents(mapped);
+
+    prefetchWeek(addDays(start, -7));
+    prefetchWeek(addDays(start, 7));
+  };
+
   React.useEffect(() => {
-    fetchEventsForWeek(weekStart, weekEnd);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    loadWeek(currentWeek);
   }, [currentWeek]);
 
-  // Cambiar semana anterior / siguiente
   const goToPreviousWeek = () => setCurrentWeek((prev) => addDays(prev, -7));
   const goToNextWeek = () => setCurrentWeek((prev) => addDays(prev, 7));
 
-  // Filtrar eventos dentro de la semana actual
   const eventsForWeek = events.filter(
     (e) => e.start < weekEnd && e.end > weekStart
   );
 
-  // 🔹 Calcular hora mínima y máxima con eventos
   const minHour =
     eventsForWeek.length > 0
       ? Math.max(0, Math.min(...eventsForWeek.map((e) => e.start.getHours())))
@@ -113,7 +142,6 @@ const WeeklyCalendar: React.FC = () => {
       ? Math.min(23, Math.max(...eventsForWeek.map((e) => e.end.getHours())))
       : 23;
 
-  // 🔹 Generar solo las horas necesarias
   const visibleHours = Array.from(
     { length: maxHour - minHour + 1 },
     (_, i) => i + minHour
