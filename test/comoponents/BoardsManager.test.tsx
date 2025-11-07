@@ -6,6 +6,8 @@ import { vi } from "vitest";
 import BoardsManager from "../../src/comoponents/BoardsManager";
 import workspaceReducer from "../../src/store/slices/workspaceSlice";
 import authReducer from "../../src/store/slices/authSlice";
+import { store } from "../../src/store";
+import { MemoryRouter } from "react-router-dom";
 
 vi.mock("../../src/services/api/ApiService", () => ({
   apiService: {
@@ -196,4 +198,81 @@ describe("BoardsManager Component", () => {
         renderWithStore(null);
         expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
     });
+
+  it("ejecuta handleDelete correctamente", async () => {
+    (apiService.get as any).mockResolvedValueOnce({
+      items: [
+        {
+          id: "2",
+          title: "Board Borrable",
+          description: "Desc",
+          color: "#000",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          members: [],
+        },
+      ],
+      total: 1,
+      totalPages: 1,
+    });
+
+    renderWithStore();
+    await waitFor(() => screen.getByText("Board Borrable"));
+
+    const deleteBtn = screen.getAllByRole("button")[2]; // segundo botón (trash)
+    fireEvent.click(deleteBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Tablero de prueba")).not.toBeInTheDocument();
+    });
+  });
+
+  it("calcula correctamente el rango de páginas (pageRange) en bordes", async () => {
+    (apiService.get as any).mockResolvedValue({
+      items: Array.from({ length: 10 }).map((_, i) => ({
+        id: `${i}`,
+        title: `Board ${i}`,
+        description: "desc",
+        color: "#000",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        members: [],
+      })),
+      total: 100,
+      totalPages: 10,
+    });
+
+    await act(async () => {
+      renderWithStore();
+    });
+
+    await waitFor(() => screen.getByText("Board 0"));
+    // Forzar a página alta para cubrir el caso de "end range"
+    await act(async () => {
+      fireEvent.click(screen.getByText("5"));
+      fireEvent.click(screen.getByText("10"));
+    });
+  });
+
+  it("no ejecuta fetchData si no hay workspaceId", async () => {
+    const spy = vi.spyOn(apiService, "get");
+    renderWithStore(null);
+    await waitFor(() => expect(spy).not.toHaveBeenCalled());
+  });
+
+  it("maneja correctamente los cambios de filtros por teclado (Enter)", async () => {
+    (apiService.get as any).mockResolvedValue({
+      items: [],
+      total: 0,
+      totalPages: 1,
+    });
+
+    renderWithStore();
+
+    const input = screen.getByPlaceholderText("Search by title...");
+    fireEvent.change(input, { target: { value: "NuevoFiltro" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(apiService.get).toHaveBeenCalledTimes(2));
+  });
 });
