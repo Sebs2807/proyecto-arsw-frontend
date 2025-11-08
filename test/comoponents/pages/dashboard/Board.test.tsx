@@ -4,6 +4,7 @@ import { vi } from "vitest";
 import Board from "../../../../src/comoponents/pages/dashboard/Board";
 import { MemoryRouter } from "react-router-dom";
 import { apiService } from "../../../../src/services/api/ApiService";
+import { store } from "../../../../src/store";
 
 vi.mock("../../../../src/services/api/ApiService", () => ({
   apiService: {
@@ -23,6 +24,10 @@ const mockStore = (state: any) => ({
   subscribe: () => {},
   dispatch: vi.fn(),
 });
+
+const renderWithProviders = (ui: React.ReactElement) => {
+  return render(<Provider store={store}>{ui}</Provider>);
+};
 
 describe("Board Component", () => {
 
@@ -165,4 +170,44 @@ describe("Board Component", () => {
       expect(screen.getByText(/En progreso/i)).toBeInTheDocument();
     });
   });
+
+test("abre y cierra el modal al crear una nueva lista", async () => {
+  (apiService.get as vi.Mock).mockResolvedValueOnce([]);
+
+  const store = mockStore({
+    workspace: { selectedBoard: { id: "board3", title: "Tablero Modal" } },
+    auth: { user: { email: "user@test.com" } },
+  });
+
+  await act(async () => {
+    render(
+      <Provider store={store as any}>
+        <MemoryRouter>
+          <Board />
+        </MemoryRouter>
+      </Provider>
+    );
+  });
+
+  await waitFor(() => {
+    expect(screen.getByText("+ Añadir lista")).toBeInTheDocument();
+  });
+
+  await act(async () => {
+    fireEvent.click(screen.getByText("+ Añadir lista"));
+  });
+
+  expect(await screen.findByPlaceholderText("Título de la lista")).toBeInTheDocument();
+  expect(screen.getByText("Crear lista")).toBeInTheDocument();
+  expect(screen.getByText("Cancelar")).toBeInTheDocument();
+
+  await act(async () => {
+    fireEvent.click(screen.getByText("Cancelar"));
+  });
+
+  await waitFor(() => {
+    expect(screen.queryByPlaceholderText("Título de la lista")).not.toBeInTheDocument();
+  });
+});
+
 });
