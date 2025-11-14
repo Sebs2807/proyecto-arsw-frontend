@@ -1,6 +1,6 @@
 import React from "react";
 import { LiveKitRoom, VideoConference } from "@livekit/components-react";
-import "@livekit/components-styles"; // asegúrate que esto se importa
+import "@livekit/components-styles";
 
 interface Props {
   token: string;
