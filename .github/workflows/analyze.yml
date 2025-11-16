@@ -1,0 +1,79 @@
+name: SonarCloud Frontend Analysis
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'feature/*'
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  build:
+    name: Build and Analyze (Frontend)
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      # 1. Checkout
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2. Setup Node
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 3. Cache npm
+      - name: Cache Node.js modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      # 4. Install dependencies
+      - name: Install dependencies
+        run: npm ci
+
+      # 5. Build Vite
+      - name: Build project
+        run: npm run build --if-present
+
+      # 6. Run vitest + coverage
+      - name: Run tests and generate coverage
+        run: npm run test:coverage --if-present
+
+      # 7. Fix paths in LCOV for SonarCloud
+      - name: Fix LCOV paths for SonarCloud
+        if: always()
+        run: |
+          echo "Corrigiendo rutas en coverage/lcov.info..."
+          sed -i 's|\\|/|g' coverage/lcov.info || true
+          head -20 coverage/lcov.info || true
+
+      # 8. SonarCloud Analysis
+      - name: SonarCloud Scan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_FRONT }}
+        run: |
+          echo "Running SonarCloud analysis..."
+          npx sonar-scanner \
+            -Dsonar.projectKey=Sebs2807_proyecto-arsw-frontend \
+            -Dsonar.organization=sebs2807 \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.sources=src \
+            -Dsonar.tests=src \
+            -Dsonar.test.inclusions="**/*.test.ts,**/*.test.tsx,**/*.spec.ts,**/*.spec.tsx" \
+            -Dsonar.coverage.exclusions="**/*.spec.*,**/*.test.*,**/node_modules/**,**/dist/**" \
+            -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info \
+            -Dsonar.verbose=true

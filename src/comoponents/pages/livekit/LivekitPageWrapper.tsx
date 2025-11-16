@@ -7,7 +7,12 @@ const LivekitPageWrapper: React.FC = () => {
 
   const url = "ws://localhost:7880";
 
-  if (!room || !token) return <p>Token o room inválido</p>;
+  if (!room || !token)
+    return (
+      <p className="text-text-error font-poppins p-6">
+        Token o room inválido
+      </p>
+    );
 
   return <LivekitPage token={token} url={url} />;
 };
