@@ -56,7 +56,7 @@ const Board: React.FC = () => {
   const [isSaving, setIsSaving] = React.useState(false);
   const [isAddingList, setIsAddingList] = React.useState(false);
   // Tracks active calls per card/task (cardId -> { roomId, startedBy })
-  const [activeCalls, setActiveCalls] = React.useState<Record<string, { roomId: string; startedBy?: string }>>({});
+  const [, setActiveCalls] = React.useState<Record<string, { roomId: string; startedBy?: string }>>({});
 
 
   const [draggingCards, setDraggingCards] = React.useState<
