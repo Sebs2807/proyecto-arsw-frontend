@@ -3,7 +3,7 @@ import { vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import LivekitPageWrapper from "../../../../src/comoponents/pages/livekit/LivekitPageWrapper";
 
-const mockLivekitPage = vi.fn(() => <div data-testid="mock-livekit-page" />);
+const mockLivekitPage = vi.fn((props: any) => <div data-testid="mock-livekit-page" />);
 vi.mock("../../../../src/comoponents/pages/livekit/LivekitPage", () => ({
   default: (props: any) => {
     mockLivekitPage(props);

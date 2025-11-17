@@ -10,68 +10,63 @@ vi.mock("../../../../src/services/api/ApiService", () => ({
   },
 }));
 
-import WeeklyCalendar from "../../../../src/comoponents/pages/calendar/Calendar";
+beforeAll(() => {
+  vi.setSystemTime(new Date("2025-10-19T09:00:00"));
+  // Mock api responses for the calendar weeks used in tests
+  (apiService.get as any).mockImplementation((url: string) => {
+    if (url.includes("2025-10-19")) {
+      return Promise.resolve({
+        items: [
+          {
+            id: "1",
+            summary: "Reunión de equipo",
+            start: { dateTime: "2025-10-20T09:00:00.000Z" },
+            end: { dateTime: "2025-10-20T10:00:00.000Z" },
+          },
+          {
+            id: "2",
+            summary: "Llamada cliente",
+            start: { dateTime: "2025-10-21T11:00:00.000Z" },
+            end: { dateTime: "2025-10-21T12:00:00.000Z" },
+          },
+          {
+            id: "3",
+            summary: "Planificación semanal",
+            start: { dateTime: "2025-10-22T14:00:00.000Z" },
+            end: { dateTime: "2025-10-22T15:00:00.000Z" },
+          },
+          {
+            id: "4",
+            summary: "Code Review",
+            start: { dateTime: "2025-10-23T10:00:00.000Z" },
+            end: { dateTime: "2025-10-23T11:00:00.000Z" },
+          },
+          {
+            id: "5",
+            summary: "Presentación al cliente",
+            start: { dateTime: "2025-10-24T16:00:00.000Z" },
+            end: { dateTime: "2025-10-24T17:00:00.000Z" },
+          },
+        ],
+      });
+    }
 
-import { apiService } from "../../../../src/services/api/ApiService";
+    if (url.includes("2025-11-02")) {
+      return Promise.resolve({
+        items: [
+          {
+            id: "6",
+            summary: "Reunión planificación Q4",
+            start: { dateTime: "2025-11-04T09:00:00.000Z" },
+            end: { dateTime: "2025-11-04T10:00:00.000Z" },
+          },
+        ],
+      });
+    }
 
-describe("WeeklyCalendar Component", () => {
-  beforeAll(() => {
-    vi.setSystemTime(new Date("2025-10-19T09:00:00"));
-    // Mock api responses for the calendar weeks used in tests
-    (apiService.get as any).mockImplementation((url: string) => {
-      if (url.includes("2025-10-19")) {
-        return Promise.resolve({
-          items: [
-            {
-              id: "1",
-              summary: "Reunión de equipo",
-              start: { dateTime: "2025-10-20T09:00:00.000Z" },
-              end: { dateTime: "2025-10-20T10:00:00.000Z" },
-            },
-            {
-              id: "2",
-              summary: "Llamada cliente",
-              start: { dateTime: "2025-10-21T11:00:00.000Z" },
-              end: { dateTime: "2025-10-21T12:00:00.000Z" },
-            },
-            {
-              id: "3",
-              summary: "Planificación semanal",
-              start: { dateTime: "2025-10-22T14:00:00.000Z" },
-              end: { dateTime: "2025-10-22T15:00:00.000Z" },
-            },
-            {
-              id: "4",
-              summary: "Code Review",
-              start: { dateTime: "2025-10-23T10:00:00.000Z" },
-              end: { dateTime: "2025-10-23T11:00:00.000Z" },
-            },
-            {
-              id: "5",
-              summary: "Presentación al cliente",
-              start: { dateTime: "2025-10-24T16:00:00.000Z" },
-              end: { dateTime: "2025-10-24T17:00:00.000Z" },
-            },
-          ],
-        });
-      }
-
-      if (url.includes("2025-11-02")) {
-        return Promise.resolve({
-          items: [
-            {
-              id: "6",
-              summary: "Reunión planificación Q4",
-              start: { dateTime: "2025-11-04T09:00:00.000Z" },
-              end: { dateTime: "2025-11-04T10:00:00.000Z" },
-            },
-          ],
-        });
-      }
-
-      return Promise.resolve({ items: [] });
-    });
+    return Promise.resolve({ items: [] });
   });
+});
 
 describe("WeeklyCalendar Component", () => {
   beforeEach(() => {
@@ -90,11 +85,7 @@ describe("WeeklyCalendar Component", () => {
   });
 
   it("muestra los eventos correspondientes a la semana actual", async () => {
-    (apiService.get as any).mockResolvedValueOnce([
-      { id: 1, title: "Reunión de equipo", start: "2025-11-03T09:00:00", end: "2025-11-03T10:00:00" },
-      { id: 2, title: "Llamada cliente", start: "2025-11-04T11:00:00", end: "2025-11-04T12:00:00" },
-    ]);
-
+    // Use the default mocked responses from the top-level beforeAll
     render(<WeeklyCalendar />);
 
     expect(await screen.findByText("Reunión de equipo")).toBeInTheDocument();
@@ -102,27 +93,16 @@ describe("WeeklyCalendar Component", () => {
   });
 
 it("permite navegar a la semana siguiente y muestra los eventos correctos", async () => {
-  (apiService.get as any).mockImplementation((url: string) => {
-    if (typeof url === "string" && (url.includes("2025-11-10") || url.includes("2025-11-09"))) {
-      return Promise.resolve([
-        {
-          id: 3,
-          title: "Reunión planificación Q4",
-          start: "2025-11-10T09:00:00",
-          end: "2025-11-10T10:00:00",
-        },
-      ]);
-    }
-    return Promise.resolve([]);
-  });
-
+  // Render and navigate forward until the target week appears
   render(<WeeklyCalendar />);
 
   const nextButton = await screen.findByText(/Semana siguiente/i);
 
+  // advance 2 weeks to reach the Nov 2, 2025 week from Oct 19, 2025
+  fireEvent.click(nextButton);
   fireEvent.click(nextButton);
 
-  await screen.findByText(/09 Nov 2025/i);
+  await screen.findByText(/02 Nov 2025/i);
 
   await waitFor(() => {
     const eventNode = screen.queryByText(/Reunión planificación Q4/i);
