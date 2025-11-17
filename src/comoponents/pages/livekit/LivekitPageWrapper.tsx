@@ -4,7 +4,8 @@ import LivekitPage from "./LivekitPage";
 
 const LivekitPageWrapper: React.FC = () => {
   const { room, token } = useParams<{ room: string; token: string }>();
-  const url = "https://localhost/livekit";
+
+  const url = "ws://localhost:7880";
 
   if (!room || !token) return <p>Token o room inválido</p>;
 
