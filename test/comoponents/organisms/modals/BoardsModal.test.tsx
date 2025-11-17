@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { vi } from "vitest";
 import { Provider } from "react-redux";
 import configureStore from "redux-mock-store";
-import BoardsModal from "../../../../src/comoponents/organisms/modals/BoardsModal";
+import BoardsModal from "../../../../src/comoponents/organisms/modals/boardsModal";
 import { apiService } from "../../../../src/services/api/ApiService";
 
 vi.mock("../../../../src/services/api/ApiService", () => ({
