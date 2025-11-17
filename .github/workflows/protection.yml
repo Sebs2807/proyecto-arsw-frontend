@@ -1,0 +1,37 @@
+name: Proteccion de ramas
+
+on:
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+
+jobs:
+  gitflow-validation:
+    name: GitFlow Branch Rules
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Validar reglas de Git-Flow
+        run: |
+          SOURCE="${{ github.head_ref }}"
+          TARGET="${{ github.base_ref }}"
+
+          echo "Source: $SOURCE"
+          echo "Target: $TARGET"
+
+          # feature/* → develop
+          if [[ "$SOURCE" == feature/* && "$TARGET" == "develop" ]]; then
+            echo "✔ PR válido: feature/* → develop"
+            exit 0
+          fi
+
+          # develop → main
+          if [[ "$SOURCE" == "develop" && "$TARGET" == "main" ]]; then
+            echo "✔ PR válido: develop → main"
+            exit 0
+          fi
+
+          echo "❌ Pull Request inválido según Git-Flow"
+          echo "Solo se permiten:"
+          echo "  - feature/* → develop"
+          echo "  - develop → main"
+          exit 1
