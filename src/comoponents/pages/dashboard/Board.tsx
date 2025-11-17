@@ -55,6 +55,8 @@ const Board: React.FC = () => {
   const [modalDescription, setModalDescription] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
   const [isAddingList, setIsAddingList] = React.useState(false);
+  // Tracks active calls per card/task (cardId -> { roomId, startedBy })
+  const [, setActiveCalls] = React.useState<Record<string, { roomId: string; startedBy?: string }>>({});
 
 
   const [draggingCards, setDraggingCards] = React.useState<
@@ -164,6 +166,21 @@ const Board: React.FC = () => {
         ...prev,
         [cardId]: { user, destListId: "", destIndex: -1 },
       }));
+    });
+
+    // Listen for call start/end events to show indicators on cards
+    apiService.socket?.on("call:started", ({ cardId, roomId, user }) => {
+      if (!cardId) return;
+      setActiveCalls((prev) => ({ ...prev, [cardId]: { roomId, startedBy: user } }));
+    });
+
+    apiService.socket?.on("call:ended", ({ cardId }) => {
+      if (!cardId) return;
+      setActiveCalls((prev) => {
+        const copy = { ...prev };
+        delete copy[cardId];
+        return copy;
+      });
     });
 
     apiService.socket?.on("card:dragUpdate", (data) => {
@@ -305,16 +322,51 @@ const Board: React.FC = () => {
 
   const navigate = useNavigate();
 
-  const handleLiveKit = async (roomId: string) => {
+  const handleLiveKit = async (roomId: string, email: string) => {
     try {
+      let name = memberCache[email]
+        ? `${memberCache[email].firstName} ${memberCache[email].lastName}`
+        : null;
+
+      if (!name) {
+        const member = await apiService.get<{ firstName: string; lastName: string }>(
+          `/v1/users/${encodeURIComponent(email)}`
+        );
+
+        const fullName = `${member.firstName} ${member.lastName}`;
+        name = fullName;
+
+        setMemberCache((prev) => ({
+          ...prev,
+          [email]: member,
+        }));
+      }
+
       const { token } = await apiService.get<{ token: string }>(
-        `/livekit/token?room=${roomId}&name=Santiago`
+        `/livekit/token?room=${roomId}&name=${encodeURIComponent(name)}`
       );
+
+      // Notify others that this card/room has an active call
+      try {
+        apiService.socket?.emit("call:started", {
+          boardId: selectedBoard?.id,
+          cardId: roomId,
+          roomId,
+          user: user?.email ?? "anonymous@example.com",
+        });
+        setActiveCalls((prev) => ({ ...prev, [roomId]: { roomId, startedBy: user?.email } }));
+      } catch (e) {
+        // ignore emit errors
+      }
+
       navigate(`/livekit/${roomId}/${token}`);
+
     } catch (err) {
       console.error("Error al generar token de LiveKit:", err);
     }
   };
+
+
 
   const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
   const [scheduleDateTime, setScheduleDateTime] = React.useState<string>(new Date().toISOString().slice(0,16));
@@ -877,7 +929,7 @@ const Board: React.FC = () => {
                 const attendees = scheduleAttendees.split(',').map(s=>s.trim()).filter(Boolean);
                 await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
                 if (scheduleRoomId) {
-                  await handleLiveKit(scheduleRoomId);
+                  await handleLiveKit(scheduleRoomId, user?.email || '');
                 }
               } catch (err) {
                 alert('Error creando invitación o iniciando llamada.');

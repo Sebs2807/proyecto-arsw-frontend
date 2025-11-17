@@ -9,14 +9,36 @@ interface Props {
 
 const LivekitPage: React.FC<Props> = ({ token, url }) => {
   return (
-    <div className="w-screen h-screen bg-gray-100">
+    <div className="w-screen h-screen bg-dark-900 font-poppins text-text-primary">
       <LiveKitRoom
         token={token}
         serverUrl={url}
-        connect={true}
+        connect
         onError={(err) => console.error("LiveKit error:", err)}
       >
-        <VideoConference />
+        <div
+          className="
+            w-full h-full 
+            bg-dark-900 
+            text-text-primary 
+            flex flex-col 
+            p-4
+            animate-fade-in
+          "
+        >
+          <div
+            className="
+              flex-1 
+              rounded-2xl 
+              shadow-2xl 
+              bg-dark-800 
+              border border-dark-600
+              overflow-visible
+            "
+          >
+            <VideoConference />
+          </div>
+        </div>
       </LiveKitRoom>
     </div>
   );

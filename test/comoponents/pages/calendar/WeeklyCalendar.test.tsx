@@ -10,6 +10,69 @@ vi.mock("../../../../src/services/api/ApiService", () => ({
   },
 }));
 
+import WeeklyCalendar from "../../../../src/comoponents/pages/calendar/Calendar";
+
+import { apiService } from "../../../../src/services/api/ApiService";
+
+describe("WeeklyCalendar Component", () => {
+  beforeAll(() => {
+    vi.setSystemTime(new Date("2025-10-19T09:00:00"));
+    // Mock api responses for the calendar weeks used in tests
+    (apiService.get as any).mockImplementation((url: string) => {
+      if (url.includes("2025-10-19")) {
+        return Promise.resolve({
+          items: [
+            {
+              id: "1",
+              summary: "Reunión de equipo",
+              start: { dateTime: "2025-10-20T09:00:00.000Z" },
+              end: { dateTime: "2025-10-20T10:00:00.000Z" },
+            },
+            {
+              id: "2",
+              summary: "Llamada cliente",
+              start: { dateTime: "2025-10-21T11:00:00.000Z" },
+              end: { dateTime: "2025-10-21T12:00:00.000Z" },
+            },
+            {
+              id: "3",
+              summary: "Planificación semanal",
+              start: { dateTime: "2025-10-22T14:00:00.000Z" },
+              end: { dateTime: "2025-10-22T15:00:00.000Z" },
+            },
+            {
+              id: "4",
+              summary: "Code Review",
+              start: { dateTime: "2025-10-23T10:00:00.000Z" },
+              end: { dateTime: "2025-10-23T11:00:00.000Z" },
+            },
+            {
+              id: "5",
+              summary: "Presentación al cliente",
+              start: { dateTime: "2025-10-24T16:00:00.000Z" },
+              end: { dateTime: "2025-10-24T17:00:00.000Z" },
+            },
+          ],
+        });
+      }
+
+      if (url.includes("2025-11-02")) {
+        return Promise.resolve({
+          items: [
+            {
+              id: "6",
+              summary: "Reunión planificación Q4",
+              start: { dateTime: "2025-11-04T09:00:00.000Z" },
+              end: { dateTime: "2025-11-04T10:00:00.000Z" },
+            },
+          ],
+        });
+      }
+
+      return Promise.resolve({ items: [] });
+    });
+  });
+
 describe("WeeklyCalendar Component", () => {
   beforeEach(() => {
     vi.clearAllMocks();
