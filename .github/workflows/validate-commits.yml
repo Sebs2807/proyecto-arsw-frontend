@@ -1,0 +1,63 @@
+name: Validate branch and commits
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Validate branch name
+        run: |
+          # Para evento "create" (GITHUB_HEAD_REF está vacío)
+          if [ -z "${GITHUB_HEAD_REF}" ]; then
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          else
+            BRANCH_NAME="${GITHUB_HEAD_REF}"
+          fi
+
+          echo "Validando nombre de la rama: $BRANCH_NAME"
+
+          if [[ ! "$BRANCH_NAME" =~ ^feature\/[0-9]+-[a-z0-9-]+$ ]]; then
+            echo "Nombre de rama inválido: $BRANCH_NAME"
+            echo "Debe cumplir con: feature/<id>-<descripcion>"
+            echo "Ejemplo válido: feature/325-creacion-tableros"
+            exit 1
+          fi
+
+          echo "✔ Nombre de rama válida."
+
+      - name: Validate commit messages (PR only)
+        if: ${{ github.event_name == 'pull_request' }}
+        run: |
+          echo "Validando commits del Pull Request..."
+
+          # Obtener solo los commits del PR usando GitHub CLI
+          PR_COMMITS=$(gh pr view ${{ github.event.pull_request.number }} --json commits --jq '.commits[].messageHeadline')
+
+          if [ -z "$PR_COMMITS" ]; then
+            echo "⚠ No hay commits en el PR."
+            exit 0
+          fi
+
+          echo "Commits encontrados:"
+          echo "$PR_COMMITS"
+
+          while IFS= read -r line; do
+            if [[ ! "$line" =~ ^AB#[0-9]+\ .* ]]; then
+              echo "Commit inválido: '$line'"
+              echo "Formato requerido: AB#<id> Mensaje"
+              exit 1
+            fi
+          done <<< "$PR_COMMITS"
+
+          echo "✔ Commit messages válidos."
