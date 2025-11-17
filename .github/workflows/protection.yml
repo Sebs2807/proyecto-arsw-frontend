@@ -30,7 +30,7 @@ jobs:
             exit 0
           fi
 
-          echo "❌ Pull Request inválido según Git-Flow"
+          echo "Pull Request inválido según Git-Flow"
           echo "Solo se permiten:"
           echo "  - feature/* → develop"
           echo "  - develop → main"
