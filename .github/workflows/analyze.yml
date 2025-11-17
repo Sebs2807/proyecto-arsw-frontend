@@ -19,19 +19,24 @@ jobs:
       pull-requests: read
 
     steps:
-      # 1. Checkout
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # 2. Setup Node
+      - name: Restore SSL certificates
+        run: |
+          echo "Restaurando certificados..."
+          mkdir -p certs
+          echo "${{ secrets.CERT_PEM_BASE64 }}" | base64 -d > certs/synapse+1.pem
+          echo "${{ secrets.CERT_KEY_BASE64 }}" | base64 -d > certs/synapse+1-key.pem
+          ls -la certs
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # 3. Cache npm
       - name: Cache Node.js modules
         uses: actions/cache@v4
         with:
@@ -40,19 +45,15 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-
 
-      # 4. Install dependencies
       - name: Install dependencies
         run: npm ci
 
-      # 5. Build Vite
       - name: Build project
         run: npm run build --if-present
 
-      # 6. Run vitest + coverage
       - name: Run tests and generate coverage
         run: npm run test:coverage --if-present
 
-      # 7. Fix paths in LCOV for SonarCloud
       - name: Fix LCOV paths for SonarCloud
         if: always()
         run: |
@@ -60,7 +61,6 @@ jobs:
           sed -i 's|\\|/|g' coverage/lcov.info || true
           head -20 coverage/lcov.info || true
 
-      # 8. SonarCloud Analysis
       - name: SonarCloud Scan
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
