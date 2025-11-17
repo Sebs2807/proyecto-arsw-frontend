@@ -43,7 +43,7 @@ describe("LivekitPageWrapper", () => {
     expect(mockLivekitPage).toHaveBeenCalledWith(
       expect.objectContaining({
         token: "token123",
-        url: "https://localhost/livekit",
+        url: "ws://localhost:7880",
       })
     );
   });

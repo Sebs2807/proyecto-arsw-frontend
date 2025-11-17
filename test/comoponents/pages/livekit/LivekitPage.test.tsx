@@ -35,7 +35,7 @@ describe("LivekitPage", () => {
 
   it("renderiza el contenedor principal con clases de Tailwind", () => {
     const { container } = render(<LivekitPage token={mockToken} url={mockUrl} />);
-    const mainDiv = container.querySelector(".w-screen.h-screen.bg-gray-100");
+    const mainDiv = container.querySelector(".w-screen.h-screen.bg-dark-900");
     expect(mainDiv).toBeInTheDocument();
   });
 
