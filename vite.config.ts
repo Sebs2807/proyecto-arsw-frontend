@@ -18,23 +18,25 @@ const httpsOptions =
     : undefined;
 
 export default defineConfig({
-  plugins: [react(), svgr()],
-  test: {
-    globals: true,
-    testTimeout: 10000,
-    hookTimeout: 10000,
-    environment: "jsdom",
-    setupFiles: "./test/setup.ts",
-    css: true,
-    coverage: {
-      provider: "v8",
-      reporter: ["text", "html"],
-      reportsDirectory: "./coverage",
-  },
-  },
-  server: {
-    https: httpsOptions,
-    host: true,
-    port: 5173,
-  },
+	plugins: [react(), svgr()],
+	test: {
+		globals: true,
+		testTimeout: 10000,
+		hookTimeout: 10000,
+		environment: "jsdom",
+		setupFiles: "./test/setup.ts",
+		css: true,
+		coverage: {
+			provider: "v8",
+			reporter: ["text", "html", "lcov"],
+			reportsDirectory: "./coverage",
+			enabled: true,
+			clean: false,
+		},
+	},
+	server: {
+		https: httpsOptions,
+		host: true,
+		port: 5173,
+	},
 });
