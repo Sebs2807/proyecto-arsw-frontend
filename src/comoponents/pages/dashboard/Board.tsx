@@ -11,6 +11,8 @@ import ModalBase from "../../atoms/ModalBase";
 import { RiCalendarScheduleFill } from "react-icons/ri";
 import { IoIosSend } from "react-icons/io";
 import { FaPhone } from "react-icons/fa";
+import { BsFillTelephoneForwardFill } from "react-icons/bs";
+import { LIVEKIT_ACTIVE_BOARD_KEY, LIVEKIT_ACTIVE_ROOM_KEY } from "../../../constants/livekit";
 
 
 export interface Task {
@@ -39,6 +41,7 @@ const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
 const Board: React.FC = () => {
   const { selectedBoard } = useSelector((state: RootState) => state.workspace);
   const user = useSelector((state: RootState) => state.auth.user);
+  const navigate = useNavigate();
   const [memberCache, setMemberCache] = React.useState<Record<string, { firstName: string; lastName: string }>>({});
   const [draggingNames, setDraggingNames] = React.useState<Record<string, string>>({});
   const [lists, setLists] = React.useState<List[]>([]);
@@ -55,8 +58,7 @@ const Board: React.FC = () => {
   const [modalDescription, setModalDescription] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
   const [isAddingList, setIsAddingList] = React.useState(false);
-  // Tracks active calls per card/task (cardId -> { roomId, startedBy })
-  const [, setActiveCalls] = React.useState<Record<string, { roomId: string; startedBy?: string }>>({});
+  const [activeCalls, setActiveCalls] = React.useState<Record<string, { roomId: string; startedBy?: string }>>({});
 
 
   const [draggingCards, setDraggingCards] = React.useState<
@@ -76,6 +78,7 @@ const Board: React.FC = () => {
     if (!selectedBoard?.id) {
       setError("No hay tablero seleccionado.");
       setLists([]);
+      setActiveCalls({});
       setLoading(false);
       return;
     }
@@ -161,6 +164,57 @@ const Board: React.FC = () => {
       boardId
     );
 
+    const requestActiveCalls = () => {
+      apiService.socket?.emit("call:requestState", { boardId });
+    };
+
+    const handleCallActiveSet = ({
+      boardId: payloadBoardId,
+      calls,
+    }: {
+      boardId: string;
+      calls: Array<{ cardId: string; roomId: string; startedBy?: string }>;
+    }) => {
+      if (payloadBoardId !== boardId) return;
+
+      const mapped: Record<string, { roomId: string; startedBy?: string }> = {};
+      calls.forEach((call) => {
+        if (call.cardId && call.roomId) {
+          mapped[call.cardId] = {
+            roomId: call.roomId,
+            startedBy: call.startedBy,
+          };
+        }
+      });
+
+      const activeRoomForThisClient =
+        typeof window !== "undefined"
+          ? window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY)
+          : null;
+
+      const cleaned = { ...mapped };
+
+      Object.entries(mapped).forEach(([cardId, info]) => {
+        const sameUser = info.startedBy && info.startedBy === (user?.email ?? "");
+        const clientCurrentlyInRoom = activeRoomForThisClient && activeRoomForThisClient === cardId;
+
+        if (sameUser && !clientCurrentlyInRoom) {
+          apiService.socket?.emit("call:ended", {
+            boardId,
+            cardId,
+            user: user?.email ?? "anonymous@example.com",
+          });
+          delete cleaned[cardId];
+        }
+      });
+
+      setActiveCalls(cleaned);
+    };
+
+    apiService.socket?.on("connect", requestActiveCalls);
+    apiService.socket?.on("call:activeSet", handleCallActiveSet);
+    requestActiveCalls();
+
     apiService.socket?.on("card:dragStart", ({ cardId, user }) => {
       setDraggingCards((prev) => ({
         ...prev,
@@ -168,19 +222,43 @@ const Board: React.FC = () => {
       }));
     });
 
-    // Listen for call start/end events to show indicators on cards
     apiService.socket?.on("call:started", ({ cardId, roomId, user }) => {
       if (!cardId) return;
       setActiveCalls((prev) => ({ ...prev, [cardId]: { roomId, startedBy: user } }));
     });
 
-    apiService.socket?.on("call:ended", ({ cardId }) => {
+    apiService.socket?.on("call:ended", ({ boardId: payloadBoardId, cardId, user: endedBy }: { boardId?: string; cardId?: string; user?: string }) => {
+      if (payloadBoardId && payloadBoardId !== boardId) return;
       if (!cardId) return;
       setActiveCalls((prev) => {
         const copy = { ...prev };
         delete copy[cardId];
         return copy;
       });
+
+      if (typeof window !== "undefined") {
+        const activeRoomId = window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY);
+        if (activeRoomId && activeRoomId === cardId) {
+          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+          if (window.location.pathname.startsWith("/livekit")) {
+            window.location.href = "https://localhost:5173/boards";
+          } else {
+            navigate("/boards");
+          }
+          return;
+        }
+
+        if (endedBy && endedBy === (user?.email ?? "")) {
+          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+          if (window.location.pathname.startsWith("/livekit")) {
+            window.location.href = "https://localhost:5173/boards";
+          } else {
+            navigate("/boards");
+          }
+        }
+      }
     });
 
     apiService.socket?.on("card:dragUpdate", (data) => {
@@ -262,9 +340,11 @@ const Board: React.FC = () => {
 
 
     return () => {
+      apiService.socket?.off("connect", requestActiveCalls);
+      apiService.socket?.off("call:activeSet", handleCallActiveSet);
       apiService.disconnectSocket();
     };
-  }, [selectedBoard?.id]);
+  }, [selectedBoard?.id, user?.email]);
 
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -320,8 +400,6 @@ const Board: React.FC = () => {
     });
   };
 
-  const navigate = useNavigate();
-
   const handleLiveKit = async (roomId: string, email: string) => {
     try {
       let name = memberCache[email]
@@ -342,11 +420,24 @@ const Board: React.FC = () => {
         }));
       }
 
+      const baseIdentity = (user?.email || name || `guest-${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "_");
+      const randomSuffix =
+        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID().slice(0, 8)
+          : Math.random().toString(36).slice(2, 10);
+      const uniqueIdentity = `${baseIdentity}-${randomSuffix}`;
+      const displayName = name ?? "Invitado";
+
+      const params = new URLSearchParams({
+        room: roomId,
+        identity: uniqueIdentity,
+        name: displayName,
+      });
+
       const { token } = await apiService.get<{ token: string }>(
-        `/livekit/token?room=${roomId}&name=${encodeURIComponent(name)}`
+        `/livekit/token?${params.toString()}`
       );
 
-      // Notify others that this card/room has an active call
       try {
         apiService.socket?.emit("call:started", {
           boardId: selectedBoard?.id,
@@ -356,13 +447,33 @@ const Board: React.FC = () => {
         });
         setActiveCalls((prev) => ({ ...prev, [roomId]: { roomId, startedBy: user?.email } }));
       } catch (e) {
-        // ignore emit errors
       }
 
-      navigate(`/livekit/${roomId}/${token}`);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(LIVEKIT_ACTIVE_ROOM_KEY, roomId);
+        if (selectedBoard?.id) {
+          window.sessionStorage.setItem(LIVEKIT_ACTIVE_BOARD_KEY, selectedBoard.id);
+        }
+      }
+
+      navigate(`/livekit/${roomId}/${token}`, {
+        state: {
+          boardId: selectedBoard?.id,
+          cardId: roomId,
+        },
+      });
 
     } catch (err) {
       console.error("Error al generar token de LiveKit:", err);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+        window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+      }
+      setActiveCalls((prev) => {
+        const copy = { ...prev };
+        delete copy[roomId];
+        return copy;
+      });
     }
   };
 
@@ -376,6 +487,10 @@ const Board: React.FC = () => {
   const [scheduledLinks, setScheduledLinks] = React.useState<{ htmlLink?: string; googleAddUrl?: string; icsUrl?: string; shareLink?: string } | null>(null);
   const [copied, setCopied] = React.useState(false);
   const [scheduleRoomId, setScheduleRoomId] = React.useState<string | null>(null);
+  const [isJoiningCall, setIsJoiningCall] = React.useState(false);
+
+  const currentScheduleCardId = scheduleRoomId ?? (editingTask ? editingTask.id : null);
+  const hasActiveCall = currentScheduleCardId ? Boolean(activeCalls[currentScheduleCardId]) : false;
 
   const formatForGoogleDates = (d: Date) => {
     return d.toISOString().replace(/-|:|\.\d{3}/g, "");
@@ -628,13 +743,18 @@ const Board: React.FC = () => {
                                   </span>
                                 )}
 
+                                {activeCalls[task.id] && (
+                                  <span className="absolute top-1 right-1 text-[10px]">
+                                    <BsFillTelephoneForwardFill color="green" size={16}/>
+                                  </span>
+                                )}
+
                                 <h3 className="font-medium truncate text-text-primary">
                                   {task.title}
                                 </h3>
                                 <p className="text-xs mt-1 line-clamp-2 text-text-muted">
                                   {task.description}
                                 </p>
-                                {/* action buttons moved into modal */}
                               </div>
                             );
 
@@ -704,7 +824,6 @@ const Board: React.FC = () => {
                 )}
               </Droppable>
             ))}
-            {/* Add-list card */}
             <div className="flex-shrink-0 w-[300px] bg-dark-800 rounded-lg border border-dark-600 p-4 flex flex-col">
               {isAddingList ? (
                 <div className="flex flex-col gap-3">
@@ -748,7 +867,6 @@ const Board: React.FC = () => {
           </div>
         </div>
       </DragDropContext>
-      {/* Modal for viewing/editing a task (basic box for now) */}
       <ModalBase
   isOpen={!!editingTask}
   onClose={() => setEditingTask(null)}
@@ -772,7 +890,6 @@ const Board: React.FC = () => {
     />
 
     <div className="flex justify-between items-center mt-3">
-      {/* Botón eliminar (sin fondo) */}
       <button
         onClick={async () => {
           if (!editingTask) return;
@@ -859,7 +976,6 @@ const Board: React.FC = () => {
   </div>
 </ModalBase>
 
-    {/* Scheduling modal */}
     <ModalBase
       isOpen={isScheduleModalOpen}
       onClose={() => {
@@ -867,11 +983,17 @@ const Board: React.FC = () => {
         setIsScheduleModalOpen(false);
         setScheduledLinks(null);
         setScheduleRoomId(null);
+        setIsJoiningCall(false);
       }}
       title={"Agendar llamada"}
       width="max-w-lg"
     >
       <div className="space-y-4 mt-2">
+        {hasActiveCall && (
+          <div className="p-2 rounded border border-limeyellow-600 bg-dark-900 text-xs text-limeyellow-400">
+            Ya existe una llamada activa para esta tarjeta. Únete para continuar.
+          </div>
+        )}
         <label className="block text-sm text-text-muted">Fecha y hora</label>
         <input
           type="datetime-local"
@@ -923,22 +1045,26 @@ const Board: React.FC = () => {
 
           <button
             onClick={async () => {
+              if (!scheduleRoomId) return;
+              setIsJoiningCall(true);
               try {
-                const start = new Date(scheduleDateTime);
-                const end = new Date(start.getTime() + scheduleDurationMinutes * 60 * 1000);
-                const attendees = scheduleAttendees.split(',').map(s=>s.trim()).filter(Boolean);
-                await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
-                if (scheduleRoomId) {
-                  await handleLiveKit(scheduleRoomId, user?.email || '');
+                if (!hasActiveCall) {
+                  const start = new Date(scheduleDateTime);
+                  const end = new Date(start.getTime() + scheduleDurationMinutes * 60 * 1000);
+                  const attendees = scheduleAttendees.split(',').map(s=>s.trim()).filter(Boolean);
+                  await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
                 }
+                await handleLiveKit(scheduleRoomId, user?.email || '');
               } catch (err) {
-                alert('Error creando invitación o iniciando llamada.');
+                alert('Error al procesar la llamada. Revisa la consola.');
+              } finally {
+                setIsJoiningCall(false);
               }
             }}
-            disabled={isScheduling}
+            disabled={isScheduling || isJoiningCall}
             className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-dark-600 text-text-primary rounded-lg"
           >
-            {isScheduling ? 'Procesando...' : <>Crear llamada <FaPhone /></>}
+            {isScheduling || isJoiningCall ? 'Procesando...' : hasActiveCall ? <>Unirse a llamada <FaPhone /></> : <>Crear llamada <FaPhone /></>}
           </button>
 
           <button
@@ -947,8 +1073,9 @@ const Board: React.FC = () => {
               setIsScheduleModalOpen(false);
               setScheduledLinks(null);
               setScheduleRoomId(null);
+              setIsJoiningCall(false);
             }}
-            className="px-3 py-1 bg-dark-700 text-text-muted rounded-lg"
+            className="px-3 py-1 bg-dark-900 text-text-muted rounded-lg"
           >Cerrar</button>
         </div>
 
