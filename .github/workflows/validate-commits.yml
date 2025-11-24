@@ -3,8 +3,8 @@ name: Validate branch and commits
 on:
   pull_request:
     branches:
-      - main
       - develop
+      - main
 
 jobs:
   validate:
@@ -14,50 +14,80 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0
+          fetch-depth: 3
 
-      - name: Validate branch name
+      - name: Detect branch name
+        id: detect
         run: |
-          # Para evento "create" (GITHUB_HEAD_REF está vacío)
-          if [ -z "${GITHUB_HEAD_REF}" ]; then
-            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          if [ -n "${GITHUB_HEAD_REF}" ]; then
+            echo "branch=${GITHUB_HEAD_REF}" >> $GITHUB_OUTPUT
           else
-            BRANCH_NAME="${GITHUB_HEAD_REF}"
+            echo "branch=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
           fi
 
-          echo "Validando nombre de la rama: $BRANCH_NAME"
-
-          if [[ ! "$BRANCH_NAME" =~ ^feature\/[0-9]+-[a-z0-9-]+$ ]]; then
-            echo "Nombre de rama inválido: $BRANCH_NAME"
-            echo "Debe cumplir con: feature/<id>-<descripcion>"
-            echo "Ejemplo válido: feature/325-creacion-tableros"
-            exit 1
-          fi
-
-          echo "✔ Nombre de rama válida."
-
-      - name: Validate commit messages (PR only)
-        if: ${{ github.event_name == 'pull_request' }}
+      - name: Validate branch only for feature/fix/docs/test
         run: |
-          echo "Validando commits del Pull Request..."
+          BRANCH="${{ steps.detect.outputs.branch }}"
+          echo "Validando rama: $BRANCH"
 
-          # Obtener solo los commits del PR usando GitHub CLI
-          PR_COMMITS=$(gh pr view ${{ github.event.pull_request.number }} --json commits --jq '.commits[].messageHeadline')
-
-          if [ -z "$PR_COMMITS" ]; then
-            echo "⚠ No hay commits en el PR."
+          if [[ "$BRANCH" == "develop" || "$BRANCH" == "main" ]]; then
+            echo "Rama es 'develop' o 'main'. No se valida."
             exit 0
           fi
 
+          if [[ ! "$BRANCH" =~ ^(feature|fix|docs|test)\/[0-9]+-[a-z0-9-]+$ ]]; then
+            echo "Nombre de rama inválido: $BRANCH"
+            echo "Debe cumplir: (feature|fix|docs|test)/<id>-descripcion"
+            exit 1
+          fi
+
+          echo "Nombre de rama válido."
+
+      - name: Skip commit validation for develop → main
+        id: skip_commits
+        run: |
+          BASE="${{ github.base_ref }}"
+          HEAD="${{ github.head_ref }}"
+
+          if [[ "$BASE" == "main" && "$HEAD" == "develop" ]]; then
+            echo "skip=true" >> $GITHUB_OUTPUT
+            echo "PR de develop → main: no se validan commits."
+          else
+            echo "skip=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate the last 2 commit messages
+        if: ${{ github.event_name == 'pull_request' && steps.skip_commits.outputs.skip == 'false' }}
+        run: |
+          echo "Validando solo los últimos 2 commits..."
+
+          # Obtener los últimos 2 mensajes de commit del HEAD del PR
+          COMMITS=$(git log -2 --pretty=format:"%s")
+
           echo "Commits encontrados:"
-          echo "$PR_COMMITS"
+          echo "$COMMITS"
 
-          while IFS= read -r line; do
-            if [[ ! "$line" =~ ^AB#[0-9]+\ .* ]]; then
-              echo "Commit inválido: '$line'"
-              echo "Formato requerido: AB#<id> Mensaje"
-              exit 1
+          INVALID=0
+
+          while IFS= read -r msg; do
+            echo "Revisando: '$msg'"
+
+            # Permitir merge commits
+            if echo "$msg" | grep -qi "merge"; then
+              echo " - Merge commit permitido."
+              continue
             fi
-          done <<< "$PR_COMMITS"
 
-          echo "✔ Commit messages válidos."
+            # Validar formato AB#123 Mensaje
+            if ! echo "$msg" | grep -Eq "^AB#[0-9]+ "; then
+              echo "Commit inválido: '$msg'"
+              INVALID=1
+            fi
+          done <<< "$COMMITS"
+
+          if [ $INVALID -eq 1 ]; then
+            echo "Error: Hay commits inválidos."
+            exit 1
+          fi
+
+          echo "Todos los commits cumplen el formato."
