@@ -420,11 +420,24 @@ const Board: React.FC = () => {
         }));
       }
 
-      const baseIdentity = (user?.email || name || `guest-${Date.now()}`).replace(/[^a-zA-Z0-9_-]/g, "_");
-      const randomSuffix =
-        typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-          ? crypto.randomUUID().slice(0, 8)
-          : Math.random().toString(36).slice(2, 10);
+      const baseIdentity = (user?.email || name || `guest-${Date.now()}`)
+        .replace(/[^a-zA-Z0-9_-]/g, "_");
+
+      function getSecureRandomSuffix() {
+        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+          return crypto.randomUUID().slice(0, 8);
+        }
+
+        if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+          const arr = new Uint32Array(1);
+          window.crypto.getRandomValues(arr);
+          return arr[0].toString(16).slice(0, 8);
+        }
+
+        throw new Error("Secure random generator unavailable");
+      }
+
+      const randomSuffix = getSecureRandomSuffix();
       const uniqueIdentity = `${baseIdentity}-${randomSuffix}`;
       const displayName = name ?? "Invitado";
 

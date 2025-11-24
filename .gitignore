@@ -6,6 +6,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.sonar_lock
+report-task.txt
+/.scannerwork/*
 
 node_modules
 dist
