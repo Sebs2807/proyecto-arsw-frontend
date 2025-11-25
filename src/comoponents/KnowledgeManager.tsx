@@ -15,33 +15,46 @@ import ChevronLeftIcon from "../assets/chevron-left.svg?react";
 import ChevronRightIcon from "../assets/chevron-right.svg?react";
 import ChevronDownIcon from "../assets/chevron-down.svg?react";
 import ChevronUpIcon from "../assets/chevron-up.svg?react";
-import BoardPicker from "./molecules/BoardPicker";
-import AgentModal from "./organisms/modals/agentsModal";
-import type { Board } from "../store/slices/workspaceSlice";
+import KnowledgeModal from "./organisms/modals/knowledgeModal";
 
-export interface Agent {
+interface Knowledge {
   id: string;
-  name: string;
-  flowConfig: any;
-  workspaceId: string;
-  temperature: number;
-  maxTokens: number;
-  boards: Board[];
-  lastRunAt: string | null;
+  title: string;
+  text: string;
+  category:
+    | "product_feature"
+    | "pricing"
+    | "objection"
+    | "flow_step"
+    | "legal"
+    | "faq";
   createdAt: string;
   updatedAt: string;
 }
 
-interface TransformedRow {
+interface KnowledgeRaw {
   id: string;
-  name: string;
-  boards: number;
-  createdAt: string;
-  updatedAt: string;
+  payload: {
+    title: string;
+    text: string;
+    label?: string;
+    category:
+      | "product_feature"
+      | "pricing"
+      | "objection"
+      | "flow_step"
+      | "legal"
+      | "faq";
+    metadata?: Record<string, any>;
+  };
+  createdAt?: string;
+  updatedAt?: string;
 }
+
+interface TransformedRow extends Knowledge {}
 
 interface PaginatedResponse<T> {
-  items: T[];
+  points: T[];
   total: number;
   page: number;
   limit: number;
@@ -50,12 +63,12 @@ interface PaginatedResponse<T> {
 
 const ITEMS_PER_PAGE = 10;
 
-const AgentsManager: React.FC = () => {
+const KnowledgeManager: React.FC = () => {
   const activeWorkspaceId = useSelector(
     (state: RootState) => state.workspace.selectedWorkspace?.id
   );
 
-  const [agents, setAgents] = useState<Agent[]>([]);
+  const [knowledgeItems, setKnowledgeItems] = useState<Knowledge[]>([]);
   const [data, setData] = useState<TransformedRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -65,36 +78,29 @@ const AgentsManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [tempSearchTerm, setTempSearchTerm] = useState("");
   const [isFiltersVisible, setIsFiltersVisible] = useState(true);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [ModalAgent, setModalAgent] = useState<Agent | null>(null);
+  const [modalItem, setModalItem] = useState<Knowledge | null>(null);
   const [modalMode, setModalMode] = useState<"add" | "edit" | "delete">("add");
-
-  const [tempBoardSearchTerm, setTempBoardSearchTerm] = useState("");
-  const [tempSelectedBoardId, setTempSelectedBoardId] = useState<string | null>(
-    null
-  );
 
   const CONFIG = useMemo(
     () => ({
-      endpoint: "/v1/agents/paginated",
+      endpoint: "/v1/knowledges/paginated",
       columns: [
-        { key: "name", label: "Name" },
-        { key: "boards", label: "Boards" },
+        { key: "title", label: "Title" },
+        { key: "category", label: "Category" },
+        { key: "text", label: "Text" },
         { key: "createdAt", label: "Created" },
         { key: "actions", label: "Actions" },
       ],
-      transform: (items: Agent[]): TransformedRow[] =>
-        items.map((a) => ({
-          id: a.id,
-          name: a.name,
-          boards: a.boards.length,
-          createdAt: new Date(a.createdAt).toLocaleDateString(),
-          updatedAt: new Date(a.updatedAt).toLocaleDateString(),
+      transform: (items: Knowledge[]): TransformedRow[] =>
+        items.map((k) => ({
+          ...k,
+          createdAt: new Date(k.createdAt).toLocaleDateString(),
+          updatedAt: new Date(k.updatedAt).toLocaleDateString(),
         })),
-      title: "Agents",
-      description: "View and manage workspace AI agents.",
+      title: "Knowledge",
+      description: "View and manage your assistant knowledge base.",
     }),
     []
   );
@@ -112,23 +118,23 @@ const AgentsManager: React.FC = () => {
 
   const handleAdd = () => {
     setModalMode("add");
-    setModalAgent(null);
+    setModalItem(null);
     setIsModalOpen(true);
   };
 
   const handleEdit = (row: TransformedRow) => {
-    const agent = agents.find((a) => a.id === row.id);
-    if (!agent) return;
+    const item = knowledgeItems.find((k) => k.id === row.id);
+    if (!item) return;
     setModalMode("edit");
-    setModalAgent(agent);
+    setModalItem(item);
     setIsModalOpen(true);
   };
 
   const handleDelete = (row: TransformedRow) => {
-    const agent = agents.find((a) => a.id === row.id);
-    if (!agent) return;
+    const item = knowledgeItems.find((k) => k.id === row.id);
+    if (!item) return;
     setModalMode("delete");
-    setModalAgent(agent);
+    setModalItem(item);
     setIsModalOpen(true);
   };
 
@@ -137,39 +143,44 @@ const AgentsManager: React.FC = () => {
     const abortController = new AbortController();
     try {
       setLoading(true);
-
       let query = `${
         CONFIG.endpoint
       }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
         activeWorkspaceId
       )}`;
-
       if (searchTerm.trim())
         query += `&search=${encodeURIComponent(searchTerm)}`;
+      const response = await apiService.get<PaginatedResponse<KnowledgeRaw>>(
+        query,
+        { signal: abortController.signal }
+      );
 
-      if (tempSelectedBoardId)
-        query += `&boardId=${encodeURIComponent(tempSelectedBoardId)}`;
+      const transformed = (response.points || []).map((p) => ({
+        id: p.id,
+        title: p.payload?.title,
+        text: p.payload?.text || "",
+        category: p.payload?.category || "product_feature",
+        createdAt: p.payload?.metadata?.createdAt || new Date().toISOString(),
+        updatedAt: p.payload?.metadata?.updatedAt || new Date().toISOString(),
+      }));
 
-      const response = await apiService.get<PaginatedResponse<Agent>>(query, {
-        signal: abortController.signal,
-      });
+      console.log("Fetched knowledge items:", response);
 
-      setAgents(response.items || []);
-      setData(CONFIG.transform(response.items || []));
-      setTotalItems(response.total ?? 0);
+      setKnowledgeItems(transformed);
+      setData(CONFIG.transform(transformed));
+      setTotalItems(response.points.length);
       setTotalPages(response.totalPages ?? 1);
     } catch (error: any) {
       if (error.name !== "CanceledError") {
         console.error(`Error fetching ${CONFIG.title}:`, error);
         setData([]);
-        setAgents([]);
+        setKnowledgeItems([]);
       }
     } finally {
       setLoading(false);
     }
-
     return () => abortController.abort();
-  }, [page, searchTerm, activeWorkspaceId, tempSelectedBoardId, CONFIG]);
+  }, [page, searchTerm, activeWorkspaceId, CONFIG]);
 
   useEffect(() => {
     fetchData();
@@ -198,6 +209,7 @@ const AgentsManager: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full font-poppins">
+      {/* Header y filtros */}
       <div className="bg-dark-800 rounded-xl shadow-md p-3 mb-4 border border-dark-600">
         <div className="flex items-start justify-between">
           <div className="max-w-60">
@@ -253,17 +265,10 @@ const AgentsManager: React.FC = () => {
                 value={tempSearchTerm}
                 onChange={(e) => setTempSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
-                placeholder="Search by title..."
+                placeholder="Search by title or text..."
                 className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg border border-dark-600 focus:outline-none focus:border-limeyellow-500 transition-colors text-sm"
               />
             </div>
-            <BoardPicker
-              boardSearchTerm={tempBoardSearchTerm}
-              selectedBoardId={tempSelectedBoardId}
-              setSelectedBoardId={setTempSelectedBoardId}
-              setBoardSearchTerm={setTempBoardSearchTerm}
-              handleApplyFilters={handleApplyFilters}
-            />
             <div className="flex space-x-2">
               <button
                 onClick={handleApplyFilters}
@@ -285,6 +290,7 @@ const AgentsManager: React.FC = () => {
       </div>
 
       <div className="flex-1 bg-dark-900 rounded-xl overflow-hidden">
+        {/* Tabla */}
         {loading ? (
           <div className="text-center text-text-secondary p-6">Loading...</div>
         ) : (
@@ -314,10 +320,7 @@ const AgentsManager: React.FC = () => {
                     data.map((row, i) => (
                       <Fragment key={row.id || i}>
                         <tr
-                          onClick={() =>
-                            setExpandedRow(expandedRow === i ? null : i)
-                          }
-                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${
+                          className={`border-b border-dark-700 hover:bg-dark-800 ${
                             i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
                           }`}
                         >
@@ -347,7 +350,7 @@ const AgentsManager: React.FC = () => {
                               </td>
                             ) : (
                               <td key={key as string} className="px-4 py-3">
-                                {row[key] ?? "-"}
+                                {row[key] || "-"}
                               </td>
                             )
                           )}
@@ -359,6 +362,7 @@ const AgentsManager: React.FC = () => {
               </table>
             </div>
 
+            {/* Paginación */}
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
@@ -402,15 +406,15 @@ const AgentsManager: React.FC = () => {
         )}
       </div>
 
-      <AgentModal
+      <KnowledgeModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchData}
-        agent={ModalAgent ?? null}
+        knowledge={modalItem} // ahora es compatible
         mode={modalMode}
       />
     </div>
   );
 };
 
-export default AgentsManager;
+export default KnowledgeManager;

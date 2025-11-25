@@ -7,6 +7,7 @@ export type SynapseButtonProps = {
   navigationPath: string;
   handleSelect: (id: string, path?: string) => void;
   text?: string; // Texto opcional
+  disabled?: boolean; // <-- NUEVO
 };
 
 const SynapseButton: React.FC<SynapseButtonProps> = ({
@@ -16,6 +17,7 @@ const SynapseButton: React.FC<SynapseButtonProps> = ({
   navigationPath,
   handleSelect,
   text,
+  disabled = false,
 }) => {
   const isSelected = selected === id;
   const hasText = Boolean(text);
@@ -26,15 +28,18 @@ const SynapseButton: React.FC<SynapseButtonProps> = ({
         hasText ? "flex-row items-center" : "flex-col items-center"
       }`}
     >
-      {hasText && isSelected && (
+      {hasText && isSelected && !disabled && (
         <div className="w-1 h-8 bg-limeyellow-500 rounded-l-md"></div>
       )}
 
       <button
-        onClick={() => handleSelect(id, navigationPath)}
+        onClick={() => !disabled && handleSelect(id, navigationPath)}
+        disabled={disabled}
         className={`flex w-full items-center gap-2 px-2 py-2 rounded-md transition font-medium
           ${
-            hasText
+            disabled
+              ? "opacity-40 cursor-not-allowed bg-dark-600 text-dark-700"
+              : hasText
               ? "ml-1"
               : isSelected
               ? "bg-limeyellow-500 text-text-primary"
@@ -55,7 +60,7 @@ const SynapseButton: React.FC<SynapseButtonProps> = ({
         {hasText && <p className="text-sm">{text}</p>}
       </button>
 
-      {!hasText && isSelected && (
+      {!hasText && isSelected && !disabled && (
         <div className="w-6 h-0.5 bg-limeyellow-500 mt-1 rounded-full"></div>
       )}
     </div>

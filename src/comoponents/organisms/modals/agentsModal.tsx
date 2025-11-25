@@ -24,6 +24,7 @@ interface Agent {
   maxTokens: number;
   flowConfig?: any;
   boards: Board[];
+  workspaceId: string;
 }
 
 interface AgentModalProps {
@@ -91,22 +92,27 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
     setLoading(true);
 
-    const payload = {
-      name: name.trim() || undefined,
+    const basePayload = {
+      title: name.trim() || undefined,
       temperature,
       maxTokens,
       flowConfig: JSON.parse(flowConfig || "{}"),
       boardIds: selectedBoards.map((b) => b.id),
-      workspaceId,
     };
 
     try {
       if (isDeleting && agent) {
         await apiService.delete(`/v1/agents/${agent.id}`);
       } else if (isEditing && agent) {
-        await apiService.patch(`/v1/agents/${agent.id}`, payload);
+        await apiService.patch(`/v1/agents/${agent.id}`, {
+          ...basePayload,
+          workspaceId,
+        });
       } else {
-        await apiService.post(`/v1/agents`, payload);
+        await apiService.post(`/v1/agents`, {
+          ...basePayload,
+          workspaceId,
+        });
       }
 
       onSuccess();
@@ -118,7 +124,6 @@ const AgentModal: React.FC<AgentModalProps> = ({
     }
   };
 
-  /** Fetch boards by search */
   const fetchBoardSuggestions = async (query: string) => {
     if (!query || query.length < 2) {
       setBoardSuggestions([]);
