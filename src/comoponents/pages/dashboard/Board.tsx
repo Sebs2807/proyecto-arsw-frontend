@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import ReactDOM from "react-dom";
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd";
 import type { DropResult } from "@hello-pangea/dnd";
@@ -12,15 +12,21 @@ import { RiCalendarScheduleFill } from "react-icons/ri";
 import { IoIosSend } from "react-icons/io";
 import { FaPhone } from "react-icons/fa";
 
-
 export interface Task {
   id: string;
   title: string;
   description?: string;
+  status: string;
+  contactName?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  industry?: string;
+  priority?: "low" | "medium" | "high";
   listId: string;
+  dueDate?: string;
 }
 
-interface List {
+export interface List {
   id: string;
   title: string;
   description?: string;
@@ -39,8 +45,12 @@ const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
 const Board: React.FC = () => {
   const { selectedBoard } = useSelector((state: RootState) => state.workspace);
   const user = useSelector((state: RootState) => state.auth.user);
-  const [memberCache, setMemberCache] = React.useState<Record<string, { firstName: string; lastName: string }>>({});
-  const [draggingNames, setDraggingNames] = React.useState<Record<string, string>>({});
+  const [memberCache, setMemberCache] = React.useState<
+    Record<string, { firstName: string; lastName: string }>
+  >({});
+  const [draggingNames, setDraggingNames] = React.useState<
+    Record<string, string>
+  >({});
   const [lists, setLists] = React.useState<List[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -49,15 +59,32 @@ const Board: React.FC = () => {
   const [newTaskDescription, setNewTaskDescription] = React.useState("");
   const [isCreating, setIsCreating] = React.useState(false);
   const [newListTitle, setNewListTitle] = React.useState("");
-  
+
   const [editingTask, setEditingTask] = React.useState<Task | null>(null);
   const [modalTitle, setModalTitle] = React.useState("");
   const [modalDescription, setModalDescription] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
   const [isAddingList, setIsAddingList] = React.useState(false);
-  // Tracks active calls per card/task (cardId -> { roomId, startedBy })
-  const [, setActiveCalls] = React.useState<Record<string, { roomId: string; startedBy?: string }>>({});
 
+  const [modalContactName, setModalContactName] = useState(
+    editingTask?.contactName ?? ""
+  );
+  const [modalContactEmail, setModalContactEmail] = useState(
+    editingTask?.contactEmail ?? ""
+  );
+  const [modalContactPhone, setModalContactPhone] = useState(
+    editingTask?.contactPhone ?? ""
+  );
+  const [modalIndustry, setModalIndustry] = useState(
+    editingTask?.industry ?? ""
+  );
+  const [modalPriority, setModalPriority] = useState(
+    editingTask?.priority ?? ""
+  );
+  // Tracks active calls per card/task (cardId -> { roomId, startedBy })
+  const [, setActiveCalls] = React.useState<
+    Record<string, { roomId: string; startedBy?: string }>
+  >({});
 
   const [draggingCards, setDraggingCards] = React.useState<
     Record<string, { user: string; destListId: string; destIndex: number }>
@@ -67,7 +94,7 @@ const Board: React.FC = () => {
     Object.entries(draggingCards).forEach(async ([cardId, info]) => {
       if (!draggingNames[cardId]) {
         const name = await getUserName(info.user);
-        setDraggingNames(prev => ({ ...prev, [cardId]: name }));
+        setDraggingNames((prev) => ({ ...prev, [cardId]: name }));
       }
     });
   }, [draggingCards]);
@@ -98,6 +125,14 @@ const Board: React.FC = () => {
   }, [selectedBoard?.id]);
 
   useEffect(() => {
+    setModalContactName(editingTask?.contactName ?? "");
+    setModalContactEmail(editingTask?.contactEmail ?? "");
+    setModalContactPhone(editingTask?.contactPhone ?? "");
+    setModalIndustry(editingTask?.industry ?? "");
+    setModalPriority(editingTask?.priority ?? "");
+  }, [editingTask]);
+
+  useEffect(() => {
     if (!selectedBoard?.id) return;
 
     const boardId = selectedBoard.id;
@@ -121,11 +156,11 @@ const Board: React.FC = () => {
           prev.map((l) =>
             l.id === listId
               ? {
-                ...l,
-                cards: l.cards.some((c) => c.id === card.id)
-                  ? l.cards
-                  : [...l.cards, card],
-              }
+                  ...l,
+                  cards: l.cards.some((c) => c.id === card.id)
+                    ? l.cards
+                    : [...l.cards, card],
+                }
               : l
           )
         ),
@@ -134,11 +169,11 @@ const Board: React.FC = () => {
           prev.map((l) =>
             l.id === listId
               ? {
-                ...l,
-                cards: l.cards.map((c) =>
-                  c.id === card.id ? { ...c, ...card } : c
-                ),
-              }
+                  ...l,
+                  cards: l.cards.map((c) =>
+                    c.id === card.id ? { ...c, ...card } : c
+                  ),
+                }
               : l
           )
         ),
@@ -150,9 +185,12 @@ const Board: React.FC = () => {
               : l
           )
         ),
-  (_sourceListId, destListId, card) =>
+      (_sourceListId, destListId, card) =>
         setLists((prev) => {
-          const withoutCard = prev.map((l) => ({ ...l, cards: l.cards.filter((c) => c.id !== card.id) }));
+          const withoutCard = prev.map((l) => ({
+            ...l,
+            cards: l.cards.filter((c) => c.id !== card.id),
+          }));
 
           return withoutCard.map((l) =>
             l.id === destListId ? { ...l, cards: [...l.cards, card] } : l
@@ -171,7 +209,10 @@ const Board: React.FC = () => {
     // Listen for call start/end events to show indicators on cards
     apiService.socket?.on("call:started", ({ cardId, roomId, user }) => {
       if (!cardId) return;
-      setActiveCalls((prev) => ({ ...prev, [cardId]: { roomId, startedBy: user } }));
+      setActiveCalls((prev) => ({
+        ...prev,
+        [cardId]: { roomId, startedBy: user },
+      }));
     });
 
     apiService.socket?.on("call:ended", ({ cardId }) => {
@@ -223,43 +264,45 @@ const Board: React.FC = () => {
       });
     });
 
-
-    apiService.socket?.on("card:dragEnd", ({ cardId, destListId, destIndex }) => {
-      setDraggingCards((prev) => {
-        const copy = { ...prev };
-        delete copy[cardId];
-        return copy;
-      });
-
-      if (destListId && destIndex !== undefined) {
-        setLists((prevLists) => {
-          const allLists = [...prevLists];
-          const sourceListIndex = allLists.findIndex((l) =>
-            l.cards.some((c) => c.id === cardId)
-          );
-          const destListIndex = allLists.findIndex(
-            (l) => l.id === destListId
-          );
-          if (sourceListIndex === -1 || destListIndex === -1) return prevLists;
-
-          const newLists = [...allLists];
-          const sourceList = { ...newLists[sourceListIndex] };
-          const destList = { ...newLists[destListIndex] };
-
-          const card = sourceList.cards.find((c) => c.id === cardId);
-          if (!card) return prevLists;
-
-          sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
-          destList.cards = destList.cards.filter((c) => c.id !== cardId);
-          destList.cards.splice(destIndex, 0, card);
-
-          newLists[sourceListIndex] = sourceList;
-          newLists[destListIndex] = destList;
-          return newLists;
+    apiService.socket?.on(
+      "card:dragEnd",
+      ({ cardId, destListId, destIndex }) => {
+        setDraggingCards((prev) => {
+          const copy = { ...prev };
+          delete copy[cardId];
+          return copy;
         });
-      }
-    });
 
+        if (destListId && destIndex !== undefined) {
+          setLists((prevLists) => {
+            const allLists = [...prevLists];
+            const sourceListIndex = allLists.findIndex((l) =>
+              l.cards.some((c) => c.id === cardId)
+            );
+            const destListIndex = allLists.findIndex(
+              (l) => l.id === destListId
+            );
+            if (sourceListIndex === -1 || destListIndex === -1)
+              return prevLists;
+
+            const newLists = [...allLists];
+            const sourceList = { ...newLists[sourceListIndex] };
+            const destList = { ...newLists[destListIndex] };
+
+            const card = sourceList.cards.find((c) => c.id === cardId);
+            if (!card) return prevLists;
+
+            sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
+            destList.cards = destList.cards.filter((c) => c.id !== cardId);
+            destList.cards.splice(destIndex, 0, card);
+
+            newLists[sourceListIndex] = sourceList;
+            newLists[destListIndex] = destList;
+            return newLists;
+          });
+        }
+      }
+    );
 
     return () => {
       apiService.disconnectSocket();
@@ -329,9 +372,10 @@ const Board: React.FC = () => {
         : null;
 
       if (!name) {
-        const member = await apiService.get<{ firstName: string; lastName: string }>(
-          `/v1/users/${encodeURIComponent(email)}`
-        );
+        const member = await apiService.get<{
+          firstName: string;
+          lastName: string;
+        }>(`/v1/users/${encodeURIComponent(email)}`);
 
         const fullName = `${member.firstName} ${member.lastName}`;
         name = fullName;
@@ -354,40 +398,73 @@ const Board: React.FC = () => {
           roomId,
           user: user?.email ?? "anonymous@example.com",
         });
-        setActiveCalls((prev) => ({ ...prev, [roomId]: { roomId, startedBy: user?.email } }));
+        setActiveCalls((prev) => ({
+          ...prev,
+          [roomId]: { roomId, startedBy: user?.email },
+        }));
       } catch (e) {
         // ignore emit errors
       }
 
       navigate(`/livekit/${roomId}/${token}`);
-
     } catch (err) {
       console.error("Error al generar token de LiveKit:", err);
     }
   };
 
-
-
   const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
-  const [scheduleDateTime, setScheduleDateTime] = React.useState<string>(new Date().toISOString().slice(0,16));
-  const [scheduleDurationMinutes, setScheduleDurationMinutes] = React.useState<number>(30);
+  const [scheduleDateTime, setScheduleDateTime] = React.useState<string>(
+    new Date().toISOString().slice(0, 16)
+  );
+  const [scheduleDurationMinutes, setScheduleDurationMinutes] =
+    React.useState<number>(30);
   const [scheduleAttendees, setScheduleAttendees] = React.useState<string>("");
   const [isScheduling, setIsScheduling] = React.useState(false);
-  const [scheduledLinks, setScheduledLinks] = React.useState<{ htmlLink?: string; googleAddUrl?: string; icsUrl?: string; shareLink?: string } | null>(null);
+  const [scheduledLinks, setScheduledLinks] = React.useState<{
+    htmlLink?: string;
+    googleAddUrl?: string;
+    icsUrl?: string;
+    shareLink?: string;
+  } | null>(null);
   const [copied, setCopied] = React.useState(false);
-  const [scheduleRoomId, setScheduleRoomId] = React.useState<string | null>(null);
+  const [scheduleRoomId, setScheduleRoomId] = React.useState<string | null>(
+    null
+  );
 
   const formatForGoogleDates = (d: Date) => {
     return d.toISOString().replace(/-|:|\.\d{3}/g, "");
   };
 
-  const generateICS = (opts: { uid: string; title: string; description?: string; start: Date; end: Date; url?: string; attendees?: string[] }) => {
-    const { uid, title, description = "", start, end, url = "", attendees = [] } = opts;
+  const generateICS = (opts: {
+    uid: string;
+    title: string;
+    description?: string;
+    start: Date;
+    end: Date;
+    url?: string;
+    attendees?: string[];
+  }) => {
+    const {
+      uid,
+      title,
+      description = "",
+      start,
+      end,
+      url = "",
+      attendees = [],
+    } = opts;
     const dtstamp = new Date().toISOString().replace(/-|:|\.\d{3}/g, "");
     const dtstart = start.toISOString().replace(/-|:|\.\d{3}/g, "");
     const dtend = end.toISOString().replace(/-|:|\.\d{3}/g, "");
-    const attendeesLines = attendees.map(a => `ATTENDEE:mailto:${a}`).join("\r\n");
-    const ics = [`BEGIN:VCALENDAR`,`VERSION:2.0`,`PRODID:-//Synapse//EN`,`CALSCALE:GREGORIAN`,`BEGIN:VEVENT`,
+    const attendeesLines = attendees
+      .map((a) => `ATTENDEE:mailto:${a}`)
+      .join("\r\n");
+    const ics = [
+      `BEGIN:VCALENDAR`,
+      `VERSION:2.0`,
+      `PRODID:-//Synapse//EN`,
+      `CALSCALE:GREGORIAN`,
+      `BEGIN:VEVENT`,
       `UID:${uid}`,
       `DTSTAMP:${dtstamp}`,
       `DTSTART:${dtstart}`,
@@ -396,11 +473,21 @@ const Board: React.FC = () => {
       `DESCRIPTION:${description}`,
       attendeesLines,
       url ? `URL:${url}` : "",
-      `END:VEVENT`,`END:VCALENDAR`].filter(Boolean).join("\r\n");
+      `END:VEVENT`,
+      `END:VCALENDAR`,
+    ]
+      .filter(Boolean)
+      .join("\r\n");
     return ics;
   };
 
-  const createCalendarEvent = async (opts: { title: string; description?: string; start: Date; end: Date; attendees?: string[] }) => {
+  const createCalendarEvent = async (opts: {
+    title: string;
+    description?: string;
+    start: Date;
+    end: Date;
+    attendees?: string[];
+  }) => {
     setIsScheduling(true);
     try {
       const payload = {
@@ -408,33 +495,56 @@ const Board: React.FC = () => {
         description: opts.description,
         start: { dateTime: opts.start.toISOString() },
         end: { dateTime: opts.end.toISOString() },
-        attendees: (opts.attendees || []).map(e => ({ email: e })),
+        attendees: (opts.attendees || []).map((e) => ({ email: e })),
       };
 
-      const resp = await apiService.post<any>(`/v1/calendar/google-events`, payload);
+      const resp = await apiService.post<any>(
+        `/v1/calendar/google-events`,
+        payload
+      );
 
-      const created = resp && (resp.data || resp) ? (resp.data || resp) : resp;
-      const htmlLink: string | undefined = created?.htmlLink || created?.data?.htmlLink || created?.result?.htmlLink;
+      const created = resp && (resp.data || resp) ? resp.data || resp : resp;
+      const htmlLink: string | undefined =
+        created?.htmlLink ||
+        created?.data?.htmlLink ||
+        created?.result?.htmlLink;
 
-      const googleDates = `${formatForGoogleDates(opts.start)}/${formatForGoogleDates(opts.end)}`;
-      const addUrl = new URL('https://calendar.google.com/calendar/render');
-      addUrl.searchParams.set('action', 'TEMPLATE');
-      addUrl.searchParams.set('text', opts.title);
-      if (opts.description) addUrl.searchParams.set('details', opts.description);
-      addUrl.searchParams.set('dates', googleDates);
-      if (opts.attendees && opts.attendees.length) addUrl.searchParams.set('add', opts.attendees.join(','));
+      const googleDates = `${formatForGoogleDates(
+        opts.start
+      )}/${formatForGoogleDates(opts.end)}`;
+      const addUrl = new URL("https://calendar.google.com/calendar/render");
+      addUrl.searchParams.set("action", "TEMPLATE");
+      addUrl.searchParams.set("text", opts.title);
+      if (opts.description)
+        addUrl.searchParams.set("details", opts.description);
+      addUrl.searchParams.set("dates", googleDates);
+      if (opts.attendees && opts.attendees.length)
+        addUrl.searchParams.set("add", opts.attendees.join(","));
 
       const uid = created?.id || `synapse-${Date.now()}`;
-      const ics = generateICS({ uid, title: opts.title, description: opts.description, start: opts.start, end: opts.end, url: htmlLink, attendees: opts.attendees });
-      const blob = new Blob([ics], { type: 'text/calendar' });
+      const ics = generateICS({
+        uid,
+        title: opts.title,
+        description: opts.description,
+        start: opts.start,
+        end: opts.end,
+        url: htmlLink,
+        attendees: opts.attendees,
+      });
+      const blob = new Blob([ics], { type: "text/calendar" });
       const icsUrl = URL.createObjectURL(blob);
 
-  const shareLink = htmlLink || addUrl.toString();
-  setScheduledLinks({ htmlLink, googleAddUrl: addUrl.toString(), icsUrl, shareLink });
+      const shareLink = htmlLink || addUrl.toString();
+      setScheduledLinks({
+        htmlLink,
+        googleAddUrl: addUrl.toString(),
+        icsUrl,
+        shareLink,
+      });
 
       return { htmlLink, googleAddUrl: addUrl.toString(), icsUrl };
     } catch (err) {
-      console.error('Error creando evento en calendario:', err);
+      console.error("Error creando evento en calendario:", err);
       throw err;
     } finally {
       setIsScheduling(false);
@@ -455,8 +565,6 @@ const Board: React.FC = () => {
     }
   };
 
-  
-
   const handleDeleteList = async (listId: string) => {
     if (!window.confirm("¿Seguro que deseas eliminar esta lista?")) return;
     try {
@@ -474,7 +582,10 @@ const Board: React.FC = () => {
     }
 
     try {
-      const member = await apiService.get<{ firstName: string; lastName: string }>(`/v1/users/${encodeURIComponent(email)}`);
+      const member = await apiService.get<{
+        firstName: string;
+        lastName: string;
+      }>(`/v1/users/${encodeURIComponent(email)}`);
       setMemberCache((prev) => ({ ...prev, [email]: member }));
       return `${member.firstName} ${member.lastName}`;
     } catch {
@@ -484,26 +595,25 @@ const Board: React.FC = () => {
 
   const handleCreateTask = async (listId: string) => {
     if (!newTaskTitle.trim()) return;
+
     setIsCreating(true);
     try {
       await apiService.post<Task>("/v1/cards", {
-        cardData: {
-          title: newTaskTitle,
-          description: newTaskDescription || "Sin descripción",
-        },
-        listId,
+        title: newTaskTitle,
+        description: newTaskDescription || "Sin descripción",
+        listId: listId,
       });
+
       setNewTaskTitle("");
       setNewTaskDescription("");
       setActiveListId(null);
-    } catch {
+    } catch (err) {
+      console.error(err);
       alert("Error al crear la tarea");
     } finally {
       setIsCreating(false);
     }
   };
-
-  
 
   if (error) return <p className="text-center text-text-error">{error}</p>;
   if (!selectedBoard)
@@ -549,7 +659,6 @@ const Board: React.FC = () => {
             { once: true }
           );
         }}
-
         onDragUpdate={(update) => {
           if (!update.destination) return;
 
@@ -580,11 +689,23 @@ const Board: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={async () => {
-                            const title = window.prompt("Nuevo título de la lista:", list.title);
+                            const title = window.prompt(
+                              "Nuevo título de la lista:",
+                              list.title
+                            );
                             if (!title || !title.trim()) return;
                             try {
-                              await apiService.put<List>(`/v1/lists/${list.id}`, { title: title.trim() });
-                              setLists((prev) => prev.map(l => l.id === list.id ? { ...l, title: title.trim() } : l));
+                              await apiService.put<List>(
+                                `/v1/lists/${list.id}`,
+                                { title: title.trim() }
+                              );
+                              setLists((prev) =>
+                                prev.map((l) =>
+                                  l.id === list.id
+                                    ? { ...l, title: title.trim() }
+                                    : l
+                                )
+                              );
                             } catch {
                               alert("No se pudo actualizar la lista");
                             }
@@ -600,9 +721,19 @@ const Board: React.FC = () => {
 
                     <div className="flex flex-col gap-3 overflow-y-auto flex-1 pr-1">
                       {list.cards.map((task, index) => (
-                        <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={draggingCards[task.id] && draggingCards[task.id].user !== user?.email}>
+                        <Draggable
+                          key={task.id}
+                          draggableId={task.id}
+                          index={index}
+                          isDragDisabled={
+                            draggingCards[task.id] &&
+                            draggingCards[task.id].user !== user?.email
+                          }
+                        >
                           {(provided, snapshot) => {
-                            const isBeingDraggedByAnother = draggingCards[task.id] && draggingCards[task.id].user !== user?.email;
+                            const isBeingDraggedByAnother =
+                              draggingCards[task.id] &&
+                              draggingCards[task.id].user !== user?.email;
 
                             const card = (
                               <div
@@ -610,21 +741,28 @@ const Board: React.FC = () => {
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
                                 className={`relative p-3 rounded-lg border text-sm transition-all duration-300 
-                                    ${snapshot.isDragging
-                                    ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
-                                    : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"}
-                                    ${isBeingDraggedByAnother ? "opacity-50 cursor-not-allowed" : ""}`}
-                                onClick={() => {
-                                    if (!isBeingDraggedByAnother) {
-                                      setEditingTask(task);
-                                      setModalTitle(task.title ?? "");
-                                      setModalDescription(task.description ?? "");
+                                    ${
+                                      snapshot.isDragging
+                                        ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
+                                        : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
                                     }
-                                  }}
+                                    ${
+                                      isBeingDraggedByAnother
+                                        ? "opacity-50 cursor-not-allowed"
+                                        : ""
+                                    }`}
+                                onClick={() => {
+                                  if (!isBeingDraggedByAnother) {
+                                    setEditingTask(task);
+                                    setModalTitle(task.title ?? "");
+                                    setModalDescription(task.description ?? "");
+                                  }
+                                }}
                               >
                                 {isBeingDraggedByAnother && (
                                   <span className="absolute top-1 left-1 text-xs bg-limeyellow-600 text-text-primary px-2 py-0.5 rounded-md shadow-md">
-                                    {draggingNames[task.id] || "Cargando..."}{""}
+                                    {draggingNames[task.id] || "Cargando..."}
+                                    {""}
                                   </span>
                                 )}
 
@@ -640,7 +778,9 @@ const Board: React.FC = () => {
 
                             return snapshot.isDragging ? (
                               <DragOverlayPortal>
-                                <div className="pointer-events-none">{card}</div>
+                                <div className="pointer-events-none">
+                                  {card}
+                                </div>
                               </DragOverlayPortal>
                             ) : (
                               card
@@ -750,253 +890,382 @@ const Board: React.FC = () => {
       </DragDropContext>
       {/* Modal for viewing/editing a task (basic box for now) */}
       <ModalBase
-  isOpen={!!editingTask}
-  onClose={() => setEditingTask(null)}
-  title={modalTitle}
-  width="max-w-xl"
->
-  <div className="space-y-4 mt-2">
-    <input
-      type="text"
-      value={modalTitle}
-      onChange={(e) => setModalTitle(e.target.value)}
-      className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600 focus:outline-none focus:ring-2 focus:ring-limeyellow-500"
-      placeholder="Título"
-    />
-
-    <textarea
-      value={modalDescription}
-      onChange={(e) => setModalDescription(e.target.value)}
-      className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600 focus:outline-none focus:ring-2 focus:ring-limeyellow-500 h-32"
-      placeholder="Descripción"
-    />
-
-    <div className="flex justify-between items-center mt-3">
-      {/* Botón eliminar (sin fondo) */}
-      <button
-        onClick={async () => {
-          if (!editingTask) return;
-          if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
-          try {
-            await apiService.delete(`/v1/cards/${editingTask.id}`);
-            setLists((prev) =>
-              prev.map((l) => ({
-                ...l,
-                cards: l.cards.filter((c) => c.id !== editingTask.id),
-              }))
-            );
-            setEditingTask(null);
-          } catch (err) {
-            alert("Error al eliminar la tarea");
-          }
-        }}
-        className="px-2 py-1 text-text-error hover:text-text-secondary rounded transition flex items-center gap-2"
+        isOpen={!!editingTask}
+        onClose={() => setEditingTask(null)}
+        title={modalTitle}
+        width="max-w-xl"
       >
-        <Trash2 size={16} /> Eliminar
-      </button>
+        <div className="space-y-4 mt-2">
+          {/* Título */}
+          <input
+            type="text"
+            value={modalTitle}
+            onChange={(e) => setModalTitle(e.target.value)}
+            className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600 focus:outline-none focus:ring-2 focus:ring-limeyellow-500"
+            placeholder="Título"
+          />
 
-      <div className="flex gap-2 items-center">
-        <button
-          onClick={() => {
-            if (!editingTask) return;
-            setScheduleRoomId(editingTask.id);
-            setScheduleDateTime(new Date().toISOString().slice(0,16));
-            setScheduleAttendees("");
-            setScheduledLinks(null);
-            setIsScheduleModalOpen(true);
-          }}
-          className="px-2 py-1 text-text-accent hover:text-text-secondary rounded transition flex items-center gap-2"
-        >
-          <RiCalendarScheduleFill size={16}/> Agendar Llamada
-        </button>
+          {/* Descripción */}
+          <textarea
+            value={modalDescription}
+            onChange={(e) => setModalDescription(e.target.value)}
+            className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600 focus:outline-none focus:ring-2 focus:ring-limeyellow-500 h-32"
+            placeholder="Descripción"
+          />
 
-        <button
-          onClick={() => setEditingTask(null)}
-          className="px-2 py-1 text-text-muted hover:text-text-primary rounded transition"
-        >
-          Cancelar
-        </button>
+          {/* Contacto */}
+          <input
+            type="text"
+            value={modalContactName}
+            onChange={(e) => setModalContactName(e.target.value)}
+            className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+            placeholder="Nombre del contacto"
+          />
 
-        <button
-          onClick={async () => {
-            if (!editingTask) return;
-            const editingId = editingTask.id;
-            setIsSaving(true);
-            try {
-              const resp = await apiService.put<Partial<Task>>(`/v1/cards/${editingId}`, {
-                title: modalTitle,
-                description: modalDescription,
-              });
+          <input
+            type="email"
+            value={modalContactEmail}
+            onChange={(e) => setModalContactEmail(e.target.value)}
+            className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+            placeholder="Correo del contacto"
+          />
 
-              const updatedCard = resp && (resp as any).data ? (resp as any).data : { id: editingId, title: modalTitle, description: modalDescription };
+          <input
+            type="text"
+            value={modalContactPhone}
+            onChange={(e) => setModalContactPhone(e.target.value)}
+            className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+            placeholder="Teléfono del contacto"
+          />
 
-              setLists((prev) =>
-                prev.map((l) => ({
-                  ...l,
-                  cards: l.cards.map((c) =>
-                    c.id === editingId
-                      ? { ...c, title: (updatedCard.title ?? modalTitle), description: (updatedCard.description ?? modalDescription) }
-                      : c
-                  ),
-                }))
-              );
+          {/* Industry */}
+          <input
+            type="text"
+            value={modalIndustry}
+            onChange={(e) => setModalIndustry(e.target.value)}
+            className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+            placeholder="Industria (ej. Fintech, SaaS, Salud)"
+          />
 
-              setEditingTask(null);
-            } catch (err) {
-              console.error(err);
-              alert("Error al guardar la tarea");
-            } finally {
-              setIsSaving(false);
-            }
-          }}
-          disabled={isSaving}
-          className="px-2 py-1 text-text-accent hover:text-text-secondary rounded transition"
-        >
-          {isSaving ? "Guardando..." : "Guardar"}
-        </button>
-      </div>
-    </div>
-  </div>
-</ModalBase>
-
-    {/* Scheduling modal */}
-    <ModalBase
-      isOpen={isScheduleModalOpen}
-      onClose={() => {
-        if (scheduledLinks?.icsUrl) try { URL.revokeObjectURL(scheduledLinks.icsUrl); } catch {};
-        setIsScheduleModalOpen(false);
-        setScheduledLinks(null);
-        setScheduleRoomId(null);
-      }}
-      title={"Agendar llamada"}
-      width="max-w-lg"
-    >
-      <div className="space-y-4 mt-2">
-        <label className="block text-sm text-text-muted">Fecha y hora</label>
-        <input
-          type="datetime-local"
-          value={scheduleDateTime}
-          onChange={(e) => setScheduleDateTime(e.target.value)}
-          className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
-        />
-
-        <div className="flex gap-2">
-          <div className="flex-1">
-            <label className="block text-sm text-text-muted">Duración (min)</label>
-            <input
-              type="number"
-              value={scheduleDurationMinutes}
-              onChange={(e) => setScheduleDurationMinutes(Number(e.target.value || 0))}
-              className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
-              min={1}
-            />
-          </div>
-          <div className="flex-1">
-            <label className="block text-sm text-text-muted">Asistentes (coma-separado)</label>
-            <input
-              type="text"
-              value={scheduleAttendees}
-              onChange={(e) => setScheduleAttendees(e.target.value)}
-              className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
-              placeholder="ej: a@ejemplo.com, b@ejemplo.com"
-            />
-          </div>
-        </div>
-
-        <div className="flex gap-2 justify-end">
-          <button
-            onClick={async () => {
-              try {
-                const start = new Date(scheduleDateTime);
-                const end = new Date(start.getTime() + scheduleDurationMinutes * 60 * 1000);
-                const attendees = scheduleAttendees.split(',').map(s=>s.trim()).filter(Boolean);
-                await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
-              } catch (err) {
-                alert('Error creando invitación. Revisa la consola.');
-              }
-            }}
-            disabled={isScheduling}
-            className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-limeyellow-500 text-white rounded-lg"
+          {/* Prioridad */}
+          <select
+            value={modalPriority}
+            onChange={(e) => setModalPriority(e.target.value)}
+            className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
           >
-            {isScheduling ? 'Creando...' : <> Crear invitación <IoIosSend /></>}
-          </button>
+            <option value="">Sin prioridad</option>
+            <option value="low">Baja</option>
+            <option value="medium">Media</option>
+            <option value="high">Alta</option>
+          </select>
 
-          <button
-            onClick={async () => {
-              try {
-                const start = new Date(scheduleDateTime);
-                const end = new Date(start.getTime() + scheduleDurationMinutes * 60 * 1000);
-                const attendees = scheduleAttendees.split(',').map(s=>s.trim()).filter(Boolean);
-                await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
-                if (scheduleRoomId) {
-                  await handleLiveKit(scheduleRoomId, user?.email || '');
+          {/* Footer */}
+          <div className="flex justify-between items-center mt-3">
+            {/* Botón eliminar */}
+            <button
+              onClick={async () => {
+                if (!editingTask) return;
+                if (!window.confirm("¿Seguro que deseas eliminar esta tarea?"))
+                  return;
+
+                try {
+                  await apiService.delete(`/v1/cards/${editingTask.id}`);
+                  setLists((prev) =>
+                    prev.map((l) => ({
+                      ...l,
+                      cards: l.cards.filter((c) => c.id !== editingTask.id),
+                    }))
+                  );
+                  setEditingTask(null);
+                } catch (err) {
+                  alert("Error al eliminar la tarea");
                 }
-              } catch (err) {
-                alert('Error creando invitación o iniciando llamada.');
-              }
-            }}
-            disabled={isScheduling}
-            className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-dark-600 text-text-primary rounded-lg"
-          >
-            {isScheduling ? 'Procesando...' : <>Crear llamada <FaPhone /></>}
-          </button>
+              }}
+              className="px-2 py-1 text-text-error hover:text-text-secondary rounded transition flex items-center gap-2"
+            >
+              <Trash2 size={16} /> Eliminar
+            </button>
 
-          <button
-            onClick={() => {
-              if (scheduledLinks?.icsUrl) try { URL.revokeObjectURL(scheduledLinks.icsUrl); } catch {};
-              setIsScheduleModalOpen(false);
-              setScheduledLinks(null);
-              setScheduleRoomId(null);
-            }}
-            className="px-3 py-1 bg-dark-700 text-text-muted rounded-lg"
-          >Cerrar</button>
-        </div>
+            <div className="flex gap-2 items-center">
+              {/* Agendar llamada */}
+              <button
+                onClick={() => {
+                  if (!editingTask) return;
+                  setScheduleRoomId(editingTask.id);
+                  setScheduleDateTime(new Date().toISOString().slice(0, 16));
+                  setScheduleAttendees("");
+                  setScheduledLinks(null);
+                  setIsScheduleModalOpen(true);
+                }}
+                className="px-2 py-1 text-text-accent hover:text-text-secondary rounded transition flex items-center gap-2"
+              >
+                <RiCalendarScheduleFill size={16} /> Agendar Llamada
+              </button>
 
-        {scheduledLinks && (
-          <div className="mt-3 p-3 bg-dark-800 rounded border border-dark-600">
-            {scheduledLinks.htmlLink && (
-              <div className="mb-2">
-                <a href={scheduledLinks.htmlLink} target="_blank" rel="noreferrer" className="text-limeyellow-400 underline">Abrir evento en Google Calendar (creado)</a>
-              </div>
-            )}
-            {scheduledLinks.shareLink && (
-              <div className="mb-2 flex items-center gap-3">
-                <input
-                  type="text"
-                  readOnly
-                  value={scheduledLinks.shareLink}
-                  className="flex-1 p-2 rounded bg-dark-900 text-sm border border-dark-600"
-                />
-                <button
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(scheduledLinks.shareLink || '');
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    } catch (e) {
-                      const el = document.createElement('textarea');
-                      el.value = scheduledLinks.shareLink || '';
-                      document.body.appendChild(el);
-                      el.select();
-                      document.execCommand('copy');
-                      document.body.removeChild(el);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }
-                  }}
-                  className="px-3 py-1 bg-limeyellow-500 text-white rounded"
-                >Copiar</button>
-                {copied && <span className="text-sm text-text-muted">Copiado</span>}
-              </div>
-            )}
+              {/* Cancelar */}
+              <button
+                onClick={() => setEditingTask(null)}
+                className="px-2 py-1 text-text-muted hover:text-text-primary rounded transition"
+              >
+                Cancelar
+              </button>
+
+              {/* Guardar */}
+              <button
+                onClick={async () => {
+                  if (!editingTask) return;
+
+                  setIsSaving(true);
+                  const editingId = editingTask.id;
+
+                  try {
+                    const rawPayload = {
+                      title: modalTitle,
+                      description: modalDescription,
+                      contactName: modalContactName,
+                      contactEmail: modalContactEmail,
+                      contactPhone: modalContactPhone,
+                      industry: modalIndustry,
+                      priority: modalPriority,
+                    };
+
+                    const payload = Object.fromEntries(
+                      Object.entries(rawPayload).filter(
+                        ([, v]) => v !== "" && v !== undefined && v !== null
+                      )
+                    );
+
+                    const resp = await apiService.patch(
+                      `/v1/cards/${editingId}`,
+                      payload
+                    );
+                    const updated = resp ?? {};
+
+                    setLists((prev) =>
+                      prev.map((l) => ({
+                        ...l,
+                        cards: l.cards.map((c) =>
+                          c.id === editingId ? { ...c, ...updated } : c
+                        ),
+                      }))
+                    );
+
+                    setEditingTask(null);
+                  } catch (err) {
+                    console.error(err);
+                    alert("Error al guardar la tarea");
+                  } finally {
+                    setIsSaving(false);
+                  }
+                }}
+                disabled={isSaving}
+                className="px-2 py-1 text-text-accent hover:text-text-secondary rounded transition"
+              >
+                {isSaving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
-    </ModalBase>
+        </div>
+      </ModalBase>
 
+      {/* Scheduling modal */}
+      <ModalBase
+        isOpen={isScheduleModalOpen}
+        onClose={() => {
+          if (scheduledLinks?.icsUrl)
+            try {
+              URL.revokeObjectURL(scheduledLinks.icsUrl);
+            } catch {}
+          setIsScheduleModalOpen(false);
+          setScheduledLinks(null);
+          setScheduleRoomId(null);
+        }}
+        title={"Agendar llamada"}
+        width="max-w-lg"
+      >
+        <div className="space-y-4 mt-2">
+          <label className="block text-sm text-text-muted">Fecha y hora</label>
+          <input
+            type="datetime-local"
+            value={scheduleDateTime}
+            onChange={(e) => setScheduleDateTime(e.target.value)}
+            className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+          />
+
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="block text-sm text-text-muted">
+                Duración (min)
+              </label>
+              <input
+                type="number"
+                value={scheduleDurationMinutes}
+                onChange={(e) =>
+                  setScheduleDurationMinutes(Number(e.target.value || 0))
+                }
+                className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+                min={1}
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-sm text-text-muted">
+                Asistentes (coma-separado)
+              </label>
+              <input
+                type="text"
+                value={scheduleAttendees}
+                onChange={(e) => setScheduleAttendees(e.target.value)}
+                className="w-full p-2 rounded-lg bg-dark-800 text-sm border border-dark-600"
+                placeholder="ej: a@ejemplo.com, b@ejemplo.com"
+              />
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <button
+              onClick={async () => {
+                try {
+                  const start = new Date(scheduleDateTime);
+                  const end = new Date(
+                    start.getTime() + scheduleDurationMinutes * 60 * 1000
+                  );
+                  const attendees = scheduleAttendees
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  await createCalendarEvent({
+                    title: modalTitle || "Llamada",
+                    description: modalDescription,
+                    start,
+                    end,
+                    attendees,
+                  });
+                } catch (err) {
+                  alert("Error creando invitación. Revisa la consola.");
+                }
+              }}
+              disabled={isScheduling}
+              className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-limeyellow-500 text-white rounded-lg"
+            >
+              {isScheduling ? (
+                "Creando..."
+              ) : (
+                <>
+                  {" "}
+                  Crear invitación <IoIosSend />
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={async () => {
+                try {
+                  const start = new Date(scheduleDateTime);
+                  const end = new Date(
+                    start.getTime() + scheduleDurationMinutes * 60 * 1000
+                  );
+                  const attendees = scheduleAttendees
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  await createCalendarEvent({
+                    title: modalTitle || "Llamada",
+                    description: modalDescription,
+                    start,
+                    end,
+                    attendees,
+                  });
+                  if (scheduleRoomId) {
+                    await handleLiveKit(scheduleRoomId, user?.email || "");
+                  }
+                } catch (err) {
+                  alert("Error creando invitación o iniciando llamada.");
+                }
+              }}
+              disabled={isScheduling}
+              className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-dark-600 text-text-primary rounded-lg"
+            >
+              {isScheduling ? (
+                "Procesando..."
+              ) : (
+                <>
+                  Crear llamada <FaPhone />
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={() => {
+                if (scheduledLinks?.icsUrl)
+                  try {
+                    URL.revokeObjectURL(scheduledLinks.icsUrl);
+                  } catch {}
+                setIsScheduleModalOpen(false);
+                setScheduledLinks(null);
+                setScheduleRoomId(null);
+              }}
+              className="px-3 py-1 bg-dark-700 text-text-muted rounded-lg"
+            >
+              Cerrar
+            </button>
+          </div>
+
+          {scheduledLinks && (
+            <div className="mt-3 p-3 bg-dark-800 rounded border border-dark-600">
+              {scheduledLinks.htmlLink && (
+                <div className="mb-2">
+                  <a
+                    href={scheduledLinks.htmlLink}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-limeyellow-400 underline"
+                  >
+                    Abrir evento en Google Calendar (creado)
+                  </a>
+                </div>
+              )}
+              {scheduledLinks.shareLink && (
+                <div className="mb-2 flex items-center gap-3">
+                  <input
+                    type="text"
+                    readOnly
+                    value={scheduledLinks.shareLink}
+                    className="flex-1 p-2 rounded bg-dark-900 text-sm border border-dark-600"
+                  />
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(
+                          scheduledLinks.shareLink || ""
+                        );
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      } catch (e) {
+                        const el = document.createElement("textarea");
+                        el.value = scheduledLinks.shareLink || "";
+                        document.body.appendChild(el);
+                        el.select();
+                        document.execCommand("copy");
+                        document.body.removeChild(el);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }
+                    }}
+                    className="px-3 py-1 bg-limeyellow-500 text-white rounded"
+                  >
+                    Copiar
+                  </button>
+                  {copied && (
+                    <span className="text-sm text-text-muted">Copiado</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </ModalBase>
     </div>
   );
 };
 
 export default Board;
-
