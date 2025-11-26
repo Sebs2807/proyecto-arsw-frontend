@@ -138,6 +138,18 @@ const BoardsManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const renderMembers = (members: UserDto[]) => {
+    return members.map((m) => (
+      <span
+        key={m.id}
+        className="inline-block bg-dark-600 text-text-primary text-xs px-2 py-1 mr-1 rounded"
+      >
+        {m.firstName} {m.lastName}
+      </span>
+    ));
+  };
+
+
   const fetchData = useCallback(async () => {
     if (!activeWorkspaceId) return;
     const abortController = new AbortController();
@@ -216,9 +228,10 @@ const BoardsManager: React.FC = () => {
           </button>
         </div>
 
-        <div
-          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer"
+        <button
+          type="button"
           onClick={() => setIsFiltersVisible((v) => !v)}
+          className="flex justify-between items-center mt-3 pt-3 w-full border-t border-dark-600 cursor-pointer bg-transparent"
         >
           <h2 className="text-sm font-semibold text-text-primary">
             Filters{" "}
@@ -233,19 +246,22 @@ const BoardsManager: React.FC = () => {
               </span>
             )}
           </h2>
-          <button className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
             {isFiltersVisible ? (
               <ChevronUpIcon className="w-4 h-4" />
             ) : (
               <ChevronDownIcon className="w-4 h-4" />
             )}
-          </button>
-        </div>
+          </span>
+        </button>
 
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex flex-col w-full sm:w-48">
-              <label className="text-xs text-text-secondary font-medium mb-1">
+              <label
+                htmlFor="general-search"
+                className="text-xs text-text-secondary font-medium mb-1"
+              >
                 General Search
               </label>
               <input
@@ -337,30 +353,32 @@ const BoardsManager: React.FC = () => {
                                   </button>
                                 </div>
                               </td>
-                            ) : key === "color" ? (
-                              <td key={key as string} className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className="w-5 h-5 rounded-full border border-dark-700"
-                                    style={{ backgroundColor: row.color }}
-                                  />
-                                </div>
-                              </td>
-                            ) : (
-                              <td key={key as string} className="px-4 py-3">
-                                {key === "members"
-                                  ? row.members.map((m) => (
-                                      <span
-                                        key={m.id}
-                                        className="inline-block bg-dark-600 text-text-primary text-xs px-2 py-1 mr-1 rounded"
-                                      >
-                                        {m.firstName} {m.lastName}
-                                      </span>
-                                    ))
-                                  : row[key] || "-"}
-                              </td>
-                            )
-                          )}
+                    
+                              ) : (() => {
+                              let content;
+
+                              if (key === "color") {
+                                content = (
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="w-5 h-5 rounded-full border border-dark-700"
+                                      style={{ backgroundColor: row.color }}
+                                    />
+                                  </div>
+                                );
+                              } else if (key === "members") {
+                                content = renderMembers(row.members);
+                              } else {
+                                content = row[key] || "-";
+                              }
+
+                              return (
+                                <td key={key as string} className="px-4 py-3">
+                                  {content}
+                                </td>
+                              );
+                            })()
+                        )}
                         </tr>
                       </Fragment>
                     ))
@@ -371,11 +389,15 @@ const BoardsManager: React.FC = () => {
 
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
-                <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>–
-                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>{" "}
-                  of <strong>{totalItems}</strong>
-                </span>
+              <span className="text-xs text-text-secondary">
+                Showing{" "}
+                <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>
+                {" "}–{" "}
+                <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>
+                {" "}of{" "}
+                <strong>{totalItems}</strong>
+              </span>
+
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setPage((p) => Math.max(p - 1, 1))}

@@ -43,10 +43,12 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
   board,
   mode,
 }) => {
-  if (!isOpen) return null;
-
   const isEditing = mode === "edit";
   const isDeleting = mode === "delete";
+
+  let headerTitle = "Crear tablero";
+  if (isDeleting) headerTitle = "Eliminar tablero";
+  else if (isEditing) headerTitle = "Editar tablero";
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -63,15 +65,11 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
   const workspaceId = selectedWorkspace?.id ?? "";
 
   useEffect(() => {
-    console.log(board);
     if (board && (isEditing || isDeleting)) {
       setTitle(board.title);
       setDescription(board.description || "");
       setSelectedColor(board.color);
-
-      if (board.members) {
-        setSelectedUsers(board.members);
-      }
+      setSelectedUsers(board.members ?? []);
     } else {
       setTitle("");
       setDescription("");
@@ -79,6 +77,8 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
       setSelectedUsers([]);
     }
   }, [board, isEditing, isDeleting]);
+
+  if (!isOpen) return null;
 
   const fetchSuggestions = async (query: string) => {
     if (!query || query.length < 2) {
@@ -163,17 +163,20 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
     }
   };
 
+  let buttonLabel = "Crear";
+  if (loading) {
+    buttonLabel = "Guardando...";
+  } else if (isEditing) {
+    buttonLabel = "Actualizar";
+  }
+
   return (
     <div className="fixed inset-0 bg-dark-950/80 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-dark-800 rounded-xl p-6 w-full max-w-2xl shadow-xl border border-dark-600 relative max-h-[90vh] overflow-y-auto scrollbar-hide">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-white">
-            {isDeleting
-              ? "Eliminar tablero"
-              : isEditing
-              ? "Editar tablero"
-              : "Crear tablero"}
+            {headerTitle}
           </h2>
           <button
             onClick={onClose}
@@ -187,10 +190,9 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
           <div className="space-y-4">
             <p className="text-text-secondary text-sm">
               ¿Seguro que quieres eliminar el tablero{" "}
-              <span className="text-limeyellow-500 font-semibold">
-                {board?.title}
-              </span>
-              ? Esta acción no se puede deshacer.
+              <span className="text-limeyellow-500 font-semibold">{board?.title}</span>
+              {" "}?
+              Esta acción no se puede deshacer.
             </p>
             <div className="flex justify-end gap-2 mt-5">
               <button
@@ -212,10 +214,14 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Título */}
             <div>
-              <label className="block text-sm text-text-secondary mb-1">
+              <label
+                htmlFor="board-title"
+                className="block text-sm text-text-secondary mb-1"
+              >
                 Título
               </label>
               <input
+                id="board-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
@@ -226,10 +232,14 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
 
             {/* Descripción */}
             <div>
-              <label className="block text-sm text-text-secondary mb-1">
+              <label
+                htmlFor="description"
+                className="block text-sm text-text-secondary mb-1"
+              >
                 Descripción (opcional)
               </label>
               <textarea
+                id="description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 disabled={loading}
@@ -240,11 +250,15 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
 
             {/* Selector de color */}
             <div>
-              <label className="block text-sm text-text-secondary mb-2">
+              <label
+                htmlFor="colorPicker"
+                className="block text-sm text-text-secondary mb-2"
+              >
                 Color del tablero
               </label>
               <div className="flex flex-col items-center gap-3">
                 <HexColorPicker
+                  id="colorPicker"
                   color={selectedColor}
                   onChange={setSelectedColor}
                 />
@@ -257,10 +271,14 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
 
             {/* Buscador de usuarios */}
             <div className="relative">
-              <label className="block text-sm text-text-secondary mb-1">
+              <label
+                htmlFor="addMembers"
+                className="block text-sm text-text-secondary mb-1"
+              >
                 Agregar miembros
               </label>
               <input
+                id="addMembers"
                 type="text"
                 value={search}
                 onChange={(e) => {
@@ -276,13 +294,14 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
               {showSuggestions && suggestions.length > 0 && (
                 <div className="absolute mt-2 w-full bg-dark-600 border border-dark-600 rounded-lg shadow-md max-h-48 overflow-y-auto z-10">
                   {suggestions.map((user) => (
-                    <div
+                    <button
                       key={user.id}
+                      type="button"
                       onClick={() => handleSelectSuggestion(user)}
-                      className="px-3 py-2 text-sm text-white hover:bg-dark-700 cursor-pointer"
+                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-dark-700 cursor-pointer"
                     >
                       {user.firstName} {user.lastName} – {user.email}
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -344,7 +363,7 @@ const BoardsModal: React.FC<BoardsModalProps> = ({
                 disabled={loading || !isFormValid()}
                 className="px-3 py-2 bg-limeyellow-500 hover:bg-limeyellow-600 text-white rounded-lg text-sm disabled:opacity-50"
               >
-                {loading ? "Guardando..." : isEditing ? "Actualizar" : "Crear"}
+                {buttonLabel}
               </button>
             </div>
           </form>

@@ -14,8 +14,9 @@ const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
   onClick,
 }) => {
   return (
-    <div
+    <button
       onClick={onClick}
+      type="button"
       className={`
         relative flex items-center justify-end w-full h-[120px] flex-shrink-0 rounded-xl overflow-hidden cursor-pointer
         border transition-all duration-300 ease-in-out transform
@@ -31,9 +32,7 @@ const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
 
       <div
         className={`absolute bottom-2 right-3 text-text-primary text-sm font-poppins font-medium tracking-wide z-10 drop-shadow-md transition-all ${
-          isActive
-            ? "text-dark-600 scale-110"
-            : "text-text-secondary opacity-90"
+          isActive ? "text-dark-600 scale-110" : "text-text-secondary opacity-90"
         }`}
       >
         {title}
@@ -44,7 +43,7 @@ const BoardPreviewCard: React.FC<BoardPreviewCardProps> = ({
       )}
 
       <div className="absolute inset-0 pointer-events-none shadow-inner shadow-black/40"></div>
-    </div>
+    </button>
   );
 };
 
