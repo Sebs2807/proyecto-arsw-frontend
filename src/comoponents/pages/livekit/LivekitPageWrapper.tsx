@@ -20,7 +20,12 @@ const LivekitPageWrapper: React.FC = () => {
   const boardId = state?.boardId ?? storedBoard;
   const cardId = state?.cardId ?? storedRoom ?? room;
 
-  const url = import.meta.env.VITE_LIVEKIT_URL;
+  const defaultLivekitUrl = "ws://localhost:7880";
+  const envLivekitUrl = import.meta.env.VITE_LIVEKIT_URL;
+  const url =
+    import.meta.env.MODE === "test"
+      ? defaultLivekitUrl
+      : envLivekitUrl?.trim() || defaultLivekitUrl;
 
   if (!room || !token)
     return (
