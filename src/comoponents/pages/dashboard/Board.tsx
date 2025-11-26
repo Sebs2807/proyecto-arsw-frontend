@@ -213,16 +213,16 @@ const Board: React.FC = () => {
     setLists((prevLists) => moveCard(prevLists, destListId, card));
   };
 
-  apiService.initSocket(
-    handleNewList,
-    handleUpdatedList,
-    handleDeletedList,
-    handleCardCreated,
-    handleCardUpdated,
-    handleCardDeleted,
-    handleCardMovedExternally,
-    boardId
-  );
+  apiService.initSocket(boardId, {
+    onListCreated: handleNewList,
+    onListUpdated: handleUpdatedList,
+    onListDeleted: handleDeletedList,
+    onCardCreated: handleCardCreated,
+    onCardUpdated: handleCardUpdated,
+    onCardDeleted: handleCardDeleted,
+    onCardMoved: handleCardMovedExternally,
+  });
+
 
     const requestActiveCalls = () => {
       apiService.socket?.emit("call:requestState", { boardId });
