@@ -33,7 +33,7 @@ interface List {
 const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  if (typeof window === "undefined") return null;
+  if (globalThis.window === undefined) return null;
   const portal = document.getElementById("drag-portal");
   return ReactDOM.createPortal(children, portal ?? document.body);
 };
@@ -66,12 +66,14 @@ const Board: React.FC = () => {
   >({});
 
   useEffect(() => {
-    Object.entries(draggingCards).forEach(async ([cardId, info]) => {
-      if (!draggingNames[cardId]) {
-        const name = await getUserName(info.user);
-        setDraggingNames(prev => ({ ...prev, [cardId]: name }));
+    (async () => {
+      for (const [cardId, info] of Object.entries(draggingCards)) {
+        if (!draggingNames[cardId]) {
+          const name = await getUserName(info.user);
+          setDraggingNames(prev => ({ ...prev, [cardId]: name }));
+        }
       }
-    });
+    })();
   }, [draggingCards]);
 
   useEffect(() => {
@@ -105,64 +107,79 @@ const Board: React.FC = () => {
 
     const boardId = selectedBoard.id;
 
-    apiService.initSocket(
-      (newList) =>
-        setLists((prev) =>
-          prev.some((l) => l.id === newList.id)
-            ? prev
-            : [...prev, { ...newList, cards: [] }]
-        ),
-      (updatedList) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === updatedList.id ? { ...l, ...updatedList } : l
-          )
-        ),
-      (id) => setLists((prev) => prev.filter((l) => l.id !== id)),
-      (listId, card) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? {
-                ...l,
-                cards: l.cards.some((c) => c.id === card.id)
-                  ? l.cards
-                  : [...l.cards, card],
-              }
-              : l
-          )
-        ),
-      (listId, card) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? {
-                ...l,
-                cards: l.cards.map((c) =>
-                  c.id === card.id ? { ...c, ...card } : c
-                ),
-              }
-              : l
-          )
-        ),
-      (listId, cardId) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
-              : l
-          )
-        ),
-  (_sourceListId, destListId, card) =>
-        setLists((prev) => {
-          const withoutCard = prev.map((l) => ({ ...l, cards: l.cards.filter((c) => c.id !== card.id) }));
-
-          return withoutCard.map((l) =>
-            l.id === destListId ? { ...l, cards: [...l.cards, card] } : l
-          );
-        }),
-      boardId
+  const handleNewList = (newList: List) => {
+    setLists((prev) =>
+      prev.some((l) => l.id === newList.id)
+        ? prev
+        : [...prev, { ...newList, cards: [] }]
     );
+  };
+
+  const handleUpdatedList = (updatedList: List) => {
+    setLists((prev) =>
+      prev.map((l) =>
+        l.id === updatedList.id ? { ...l, ...updatedList } : l
+      )
+    );
+  };
+
+  const handleDeletedList = (id: string) => {
+    setLists((prev) => prev.filter((l) => l.id !== id));
+  };
+
+  const handleCardCreated = (listId: string, card: Task) => {
+    setLists((prev) =>
+      prev.map((l) => {
+        if (l.id !== listId) return l;
+        if (l.cards.some((c) => c.id === card.id)) return l;
+        return { ...l, cards: [...l.cards, card] };
+      })
+    );
+  };
+
+  const handleCardUpdated = (listId: string, card: Task) => {
+    setLists((prev) =>
+      prev.map((l) =>
+        l.id === listId
+          ? {
+              ...l,
+              cards: l.cards.map((c) =>
+                c.id === card.id ? { ...c, ...card } : c
+              ),
+            }
+          : l
+      )
+    );
+  };
+
+  const handleCardDeleted = (listId: string, cardId: string) => {
+    setLists((prev) =>
+      prev.map((l) =>
+        l.id === listId ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) } : l
+      )
+    );
+  };
+
+  const handleCardMovedExternally = (_sourceListId: string, destListId: string, card: Task) => {
+    setLists((prev) => {
+      const withoutCard = prev.map((l) => ({ ...l, cards: l.cards.filter((c) => c.id !== card.id) }));
+
+      return withoutCard.map((l) =>
+        l.id === destListId ? { ...l, cards: [...l.cards, card] } : l
+      );
+    });
+  };
+
+  apiService.initSocket(
+    handleNewList,
+    handleUpdatedList,
+    handleDeletedList,
+    handleCardCreated,
+    handleCardUpdated,
+    handleCardDeleted,
+    handleCardMovedExternally,
+    boardId
+  );
 
     const requestActiveCalls = () => {
       apiService.socket?.emit("call:requestState", { boardId });
@@ -178,23 +195,23 @@ const Board: React.FC = () => {
       if (payloadBoardId !== boardId) return;
 
       const mapped: Record<string, { roomId: string; startedBy?: string }> = {};
-      calls.forEach((call) => {
+      for (const call of calls) {
         if (call.cardId && call.roomId) {
           mapped[call.cardId] = {
             roomId: call.roomId,
             startedBy: call.startedBy,
           };
         }
-      });
+      }
 
       const activeRoomForThisClient =
-        typeof window !== "undefined"
-          ? window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY)
-          : null;
+        globalThis.window === undefined
+          ? null
+          : globalThis.window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY);
 
       const cleaned = { ...mapped };
 
-      Object.entries(mapped).forEach(([cardId, info]) => {
+      for (const [cardId, info] of Object.entries(mapped)) {
         const sameUser = info.startedBy && info.startedBy === (user?.email ?? "");
         const clientCurrentlyInRoom = activeRoomForThisClient && activeRoomForThisClient === cardId;
 
@@ -206,7 +223,7 @@ const Board: React.FC = () => {
           });
           delete cleaned[cardId];
         }
-      });
+      }
 
       setActiveCalls(cleaned);
     };
@@ -236,13 +253,13 @@ const Board: React.FC = () => {
         return copy;
       });
 
-      if (typeof window !== "undefined") {
-        const activeRoomId = window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY);
+      if (globalThis.window !== undefined) {
+        const activeRoomId = globalThis.window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY);
         if (activeRoomId && activeRoomId === cardId) {
-          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
-          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
-          if (window.location.pathname.startsWith("/livekit")) {
-            window.location.href = "https://localhost:5173/boards";
+          globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+          globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+          if (globalThis.window.location.pathname.startsWith("/livekit")) {
+            globalThis.window.location.href = import.meta.env.VITE_FRONTEND_URL + "/boards";
           } else {
             navigate("/boards");
           }
@@ -250,10 +267,10 @@ const Board: React.FC = () => {
         }
 
         if (endedBy && endedBy === (user?.email ?? "")) {
-          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
-          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
-          if (window.location.pathname.startsWith("/livekit")) {
-            window.location.href = "https://localhost:5173/boards";
+          globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+          globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+          if (globalThis.window.location.pathname.startsWith("/livekit")) {
+            globalThis.window.location.href = import.meta.env.VITE_FRONTEND_URL + "/boards";
           } else {
             navigate("/boards");
           }
@@ -424,13 +441,13 @@ const Board: React.FC = () => {
         .replace(/[^a-zA-Z0-9_-]/g, "_");
 
       function getSecureRandomSuffix() {
-        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-          return crypto.randomUUID().slice(0, 8);
+        if (globalThis.crypto !== undefined && typeof globalThis.crypto.randomUUID === "function") {
+          return globalThis.crypto.randomUUID().slice(0, 8);
         }
 
-        if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+        if (globalThis.window !== undefined && globalThis.window.crypto?.getRandomValues) {
           const arr = new Uint32Array(1);
-          window.crypto.getRandomValues(arr);
+          globalThis.window.crypto.getRandomValues(arr);
           return arr[0].toString(16).slice(0, 8);
         }
 
@@ -462,10 +479,10 @@ const Board: React.FC = () => {
       } catch (e) {
       }
 
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(LIVEKIT_ACTIVE_ROOM_KEY, roomId);
+      if (globalThis.window !== undefined) {
+        globalThis.window.sessionStorage.setItem(LIVEKIT_ACTIVE_ROOM_KEY, roomId);
         if (selectedBoard?.id) {
-          window.sessionStorage.setItem(LIVEKIT_ACTIVE_BOARD_KEY, selectedBoard.id);
+          globalThis.window.sessionStorage.setItem(LIVEKIT_ACTIVE_BOARD_KEY, selectedBoard.id);
         }
       }
 
@@ -476,11 +493,11 @@ const Board: React.FC = () => {
         },
       });
 
-    } catch (err) {
+      } catch (err) {
       console.error("Error al generar token de LiveKit:", err);
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
-        window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+      if (globalThis.window !== undefined) {
+        globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+        globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
       }
       setActiveCalls((prev) => {
         const copy = { ...prev };
@@ -586,7 +603,7 @@ const Board: React.FC = () => {
   
 
   const handleDeleteList = async (listId: string) => {
-    if (!window.confirm("¿Seguro que deseas eliminar esta lista?")) return;
+    if (!globalThis.window?.confirm("¿Seguro que deseas eliminar esta lista?")) return;
     try {
       await apiService.delete(`/v1/lists/${listId}`);
     } catch {
@@ -667,12 +684,12 @@ const Board: React.FC = () => {
             });
           };
 
-          window.addEventListener("mousemove", handleMouseMove);
+          globalThis.window?.addEventListener("mousemove", handleMouseMove);
 
-          window.addEventListener(
+          globalThis.window?.addEventListener(
             "mouseup",
             () => {
-              window.removeEventListener("mousemove", handleMouseMove);
+              globalThis.window?.removeEventListener("mousemove", handleMouseMove);
             },
             { once: true }
           );
@@ -708,7 +725,7 @@ const Board: React.FC = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={async () => {
-                            const title = window.prompt("Nuevo título de la lista:", list.title);
+                            const title = globalThis.window?.prompt("Nuevo título de la lista:", list.title);
                             if (!title || !title.trim()) return;
                             try {
                               await apiService.put<List>(`/v1/lists/${list.id}`, { title: title.trim() });
@@ -904,9 +921,9 @@ const Board: React.FC = () => {
 
     <div className="flex justify-between items-center mt-3">
       <button
-        onClick={async () => {
+          onClick={async () => {
           if (!editingTask) return;
-          if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
+          if (!globalThis.window?.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
           try {
             await apiService.delete(`/v1/cards/${editingTask.id}`);
             setLists((prev) =>
