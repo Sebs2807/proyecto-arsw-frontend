@@ -40,18 +40,18 @@ const LivekitPage: React.FC<Props> = ({ token, url, boardId, cardId }) => {
         });
       }
 
-      if (typeof globalThis.window !== "undefined") {
-        window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
-        window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+      if (globalThis.window !== undefined) {
+        globalThis.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+        globalThis.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
       }
     },
     [boardId, cardId, hasIdentifiers, userEmail]
   );
 
   const redirectToBoards = React.useCallback(() => {
-    if (typeof globalThis.window !== "undefined") {
-      window.setTimeout(() => {
-        window.location.href = import.meta.env.VITE_FRONTEND_URL + "/boards";
+    if (globalThis.window !== undefined) {
+      globalThis.setTimeout(() => {
+      globalThis.location.href = import.meta.env.VITE_FRONTEND_URL + "/boards";
       }, 50);
     }
   }, []);
@@ -78,20 +78,20 @@ const LivekitPage: React.FC<Props> = ({ token, url, boardId, cardId }) => {
       return;
     }
 
-    const noop = () => {};
-    apiService.initSocket(
-      noop,
-      noop,
-      noop,
-      noop,
-      noop,
-      noop,
-      noop,
-      boardId,
-      noop,
-      noop,
-      noop
-    );
+  const noop = () => {};
+
+  apiService.initSocket(boardId, {
+    onListCreated: noop,
+    onListUpdated: noop,
+    onListDeleted: noop,
+    onCardCreated: noop,
+    onCardUpdated: noop,
+    onCardDeleted: noop,
+    onCardMoved: noop,
+    onCardDragStart: noop,
+    onCardDragUpdate: noop,
+    onCardDragEnd: noop,
+  });
   }, [boardId]);
 
   React.useEffect(
