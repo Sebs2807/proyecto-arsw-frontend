@@ -95,31 +95,35 @@ const MembersManager: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalMember, setModalMember] = useState<Member | null>(null);
 
-  const CONFIG = useMemo(
-    () => ({
-      endpoint: "/v1/users/paginated",
-      columns: [
-        { key: "name", label: "Name" },
-        { key: "email", label: "Email" },
-        { key: "createdAt", label: "Created" },
-        { key: "role", label: "Role" },
-        { key: "actions", label: "Actions" },
-      ],
-      transform: (items: Member[]): TransformedRow[] =>
-        items.map((m) => ({
-          id: m.id,
-          name: `${m.firstName} ${m.lastName}`,
-          email: m.email,
-          createdAt: new Date(m.createdAt).toLocaleDateString(),
-          updatedAt: new Date(m.updatedAt).toLocaleDateString(),
-          role:
-            Object.entries(Role).find(([, v]) => v === m.role)?.[0] || m.role,
-        })),
-      title: "Members",
-      description: "View and manage workspace members.",
-    }),
-    []
-  );
+  const transformMembers = (items: Member[]): TransformedRow[] => {
+    return items.map((m) => ({
+      id: m.id,
+      name: `${m.firstName} ${m.lastName}`,
+      email: m.email,
+      createdAt: new Date(m.createdAt).toLocaleDateString(),
+      updatedAt: new Date(m.updatedAt).toLocaleDateString(),
+      role: Object.entries(Role).find(([, v]) => v === m.role)?.[0] || m.role,
+    }));
+  };
+
+
+const CONFIG = useMemo(
+  () => ({
+    endpoint: "/v1/users/paginated",
+    columns: [
+      { key: "name", label: "Name" },
+      { key: "email", label: "Email" },
+      { key: "createdAt", label: "Created" },
+      { key: "role", label: "Role" },
+      { key: "actions", label: "Actions" },
+    ],
+    transform: transformMembers,
+    title: "Members",
+    description: "View and manage workspace members.",
+  }),
+  []
+);
+
 
   const handleApplyFilters = useCallback(() => {
     setSearchTerm(tempSearchTerm);
@@ -273,8 +277,9 @@ const MembersManager: React.FC = () => {
           </button>
         </div>
 
-        <div
-          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer"
+        <button
+          type="button"
+          className="flex justify-between items-center w-full mt-3 pt-3 border-t border-dark-600 cursor-pointer bg-transparent"
           onClick={() => setIsFiltersVisible((v) => !v)}
         >
           <h2 className="text-sm font-semibold text-text-primary">
@@ -290,22 +295,26 @@ const MembersManager: React.FC = () => {
               </span>
             )}
           </h2>
-          <button className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
             {isFiltersVisible ? (
               <ChevronUpIcon className="w-4 h-4" />
             ) : (
               <ChevronDownIcon className="w-4 h-4" />
             )}
-          </button>
-        </div>
+          </span>
+        </button>
 
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex flex-col w-full sm:w-48">
-              <label className="text-xs text-text-secondary font-medium mb-1">
-                General Search
+            <label
+              htmlFor="general-search" 
+              className="text-xs text-text-secondary font-medium mb-1"
+            >                
+            General Search
               </label>
               <input
+                id="general-search"
                 value={tempSearchTerm}
                 onChange={(e) => setTempSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
@@ -317,10 +326,14 @@ const MembersManager: React.FC = () => {
             </div>
 
             <div className="flex flex-col w-full sm:w-40">
-              <label className="text-xs text-text-secondary font-medium mb-1">
-                Role
+            <label
+              htmlFor="role-select"
+              className="text-xs text-text-secondary font-medium mb-1"
+            >                
+              Role
               </label>
               <select
+                id="role-select"
                 value={tempSelectedRole}
                 onChange={(e) => setTempSelectedRole(e.target.value)}
                 className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg 
@@ -441,9 +454,11 @@ const MembersManager: React.FC = () => {
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>–
-                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>{" "}
-                  of <strong>{totalItems}</strong>
+                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>
+                  {" – "}
+                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>
+                  {" of "}
+                  <strong>{totalItems}</strong>
                 </span>
 
                 <div className="flex items-center gap-1">
