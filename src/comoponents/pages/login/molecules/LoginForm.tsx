@@ -11,7 +11,7 @@ export const LoginForm: React.FC = () => {
   const handleGoogleLogin = () => {
     const url = import.meta.env.VITE_API_URL + "/v1/auth/google";
     console.log("Redirigiendo a:", url);
-    window.location.href = url;
+    globalThis.location.href = url;
   };
 
   return (
