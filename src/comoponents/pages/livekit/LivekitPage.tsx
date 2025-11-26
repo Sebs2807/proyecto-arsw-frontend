@@ -40,7 +40,7 @@ const LivekitPage: React.FC<Props> = ({ token, url, boardId, cardId }) => {
         });
       }
 
-      if (typeof window !== "undefined") {
+      if (typeof globalThis.window !== "undefined") {
         window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
         window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
       }
@@ -49,9 +49,9 @@ const LivekitPage: React.FC<Props> = ({ token, url, boardId, cardId }) => {
   );
 
   const redirectToBoards = React.useCallback(() => {
-    if (typeof window !== "undefined") {
+    if (typeof globalThis.window !== "undefined") {
       window.setTimeout(() => {
-        window.location.href = "https://localhost:5173/boards";
+        window.location.href = import.meta.env.VITE_FRONTEND_URL + "/boards";
       }, 50);
     }
   }, []);
