@@ -59,12 +59,26 @@ type CardDragUpdateCallback = (data: {
 }) => void;
 type CardDragEndCallback = (cardId: string, user: string) => void;
 
+interface SocketHandlers {
+	onListCreated: ListCreatedCallback;
+	onListUpdated: ListUpdatedCallback;
+	onListDeleted: ListDeletedCallback;
+	onCardCreated: CardCreatedCallback;
+	onCardUpdated: CardUpdatedCallback;
+	onCardDeleted: CardDeletedCallback;
+	onCardMoved: CardMovedCallback;
+	onCardDragStart?: CardDragStartCallback;
+	onCardDragUpdate?: CardDragUpdateCallback;
+	onCardDragEnd?: CardDragEndCallback;
+}
+
+
 // ──────────────────────────────────────────────
 // Clase principal
 // ──────────────────────────────────────────────
 
 class ApiService {
-	private axiosInstance: AxiosInstance;
+	private readonly axiosInstance: AxiosInstance;
 	public socket: Socket | null = null;
 
 	constructor(baseURL: string) {
@@ -92,10 +106,10 @@ class ApiService {
 							"⚠️ Refresh token inválido o expirado",
 							refreshError
 						);
-						return Promise.reject(refreshError);
+						throw refreshError;
 					}
 				}
-				return Promise.reject(error);
+				throw error;
 			}
 		);
 	}
@@ -150,27 +164,27 @@ class ApiService {
 	// WebSocket
 	// ──────────────────────────────────────────────
 
-	initSocket(
-		onListCreated: ListCreatedCallback,
-		onListUpdated: ListUpdatedCallback,
-		onListDeleted: ListDeletedCallback,
-		onCardCreated: CardCreatedCallback,
-		onCardUpdated: CardUpdatedCallback,
-		onCardDeleted: CardDeletedCallback,
-		onCardMoved: CardMovedCallback,
-		boardId: string,
-		// nuevos handlers para drag realtime
-		onCardDragStart?: CardDragStartCallback,
-		onCardDragUpdate?: CardDragUpdateCallback,
-		onCardDragEnd?: CardDragEndCallback
-	) {
-		if (this.socket && this.socket.connected) {
+	initSocket(boardId: string, handlers: SocketHandlers) {
+		const {
+			onListCreated,
+			onListUpdated,
+			onListDeleted,
+			onCardCreated,
+			onCardUpdated,
+			onCardDeleted,
+			onCardMoved,
+			onCardDragStart,
+			onCardDragUpdate,
+			onCardDragEnd,
+		} = handlers;
+ 
+		if (this.socket?.connected) {
 			console.log("🔁 WebSocket ya conectado");
 			return;
 		}
 
 		const baseURL =
-			this.axiosInstance.defaults.baseURL || window.location.origin;
+			this.axiosInstance.defaults.baseURL || globalThis.location.origin;
 
 		this.socket = io(baseURL, {
 			transports: ["websocket"],
@@ -237,7 +251,7 @@ class ApiService {
 	// ──────────────────────────────────────────────
 
 	emitSocketEvent(event: string, data?: any) {
-		if (this.socket && this.socket.connected) {
+		if (this.socket?.connected) {
 			this.socket.emit(event, data);
 			console.log(`📤 Emitiendo evento: ${event}`, data);
 		} else {

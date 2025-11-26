@@ -36,7 +36,9 @@ export const checkAuth = createAsyncThunk<User | null>(
       console.log("checkAuth response:", response);
       return response;
     } catch (err: any) {
-      return rejectWithValue(null);
+      console.error("❌ Error en checkAuth:", err);
+
+      return rejectWithValue(err.response?.data ?? null);
     }
   }
 );
