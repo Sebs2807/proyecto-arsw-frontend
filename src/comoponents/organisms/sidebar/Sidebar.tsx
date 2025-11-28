@@ -7,6 +7,7 @@ import Calendar from "../../../assets/calendar.svg?react";
 import Bot from "../../../assets/bot-message-square.svg?react";
 import Columns from "../../../assets/columns-3.svg?react";
 import HomeSidebar from "./HomeSidebar";
+import CalendarSidebar from "./CalendarSidebar";
 import SynapseButton from "../../atoms/SynapseButton";
 import { setSection } from "../../../store/slices/sidebarSlice";
 import type { RootState, AppDispatch } from "../../../store";
@@ -47,7 +48,7 @@ const Sidebar: React.FC = () => {
 		{
 			id: "calendar",
 			icon: <Calendar className="h-4 w-4 inline-block" />,
-			sideMenuComponent: null,
+			sideMenuComponent: <CalendarSidebar />,
 			navigationPath: "/calendar",
 			text: "Calendario",
 		},
