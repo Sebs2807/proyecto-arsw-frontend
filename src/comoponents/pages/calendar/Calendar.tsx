@@ -16,9 +16,16 @@ interface CalendarEvent {
   color?: string;
 }
 
+import ModalBase from "../../atoms/ModalBase";
+
 const WeeklyCalendar: React.FC = () => {
   const [currentWeek, setCurrentWeek] = React.useState<Date>(new Date());
   const [events, setEvents] = React.useState<CalendarEvent[]>([]);
+  const [selectedEvent, setSelectedEvent] = React.useState<CalendarEvent | null>(null);
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const [actionLoading, setActionLoading] = React.useState(false);
+  const [newStartLocal, setNewStartLocal] = React.useState<string>("");
+  const [newEndLocal, setNewEndLocal] = React.useState<string>("");
   const cacheRef = React.useRef<Record<string, CalendarEvent[]>>({});
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 });
@@ -97,6 +104,63 @@ const WeeklyCalendar: React.FC = () => {
       cacheRef.current[key] = mapped;
     } catch (err) {
       console.warn("Prefetch failed for", key, err);
+    }
+  };
+
+  const toDatetimeLocalValue = (d: Date) => {
+    const tzOffset = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - tzOffset * 60000);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const handleEventClick = (ev: CalendarEvent) => {
+    setSelectedEvent(ev);
+    setNewStartLocal(toDatetimeLocalValue(ev.start));
+    setNewEndLocal(toDatetimeLocalValue(ev.end));
+    setModalOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!selectedEvent) return;
+    setActionLoading(true);
+    try {
+      await apiService.delete(`/v1/calendar/google-events/${selectedEvent.id}`);
+      setModalOpen(false);
+      setSelectedEvent(null);
+      await loadWeek(currentWeek);
+    } catch (err) {
+      console.error("Error deleting event:", err);
+      alert("No se pudo eliminar el evento");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReschedule = async () => {
+    if (!selectedEvent) return;
+    if (!newStartLocal || !newEndLocal) {
+      alert("Por favor selecciona fecha y hora de inicio y fin");
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const isoStart = new Date(newStartLocal).toISOString();
+      const isoEnd = new Date(newEndLocal).toISOString();
+
+      await apiService.patch(`/v1/calendar/google-events/${selectedEvent.id}`, {
+        start: { dateTime: isoStart },
+        end: { dateTime: isoEnd },
+      });
+
+      setModalOpen(false);
+      setSelectedEvent(null);
+      await loadWeek(currentWeek);
+    } catch (err) {
+      console.error("Error rescheduling event:", err);
+      alert("No se pudo reagendar el evento");
+    } finally {
+      setActionLoading(false);
     }
   };
 
@@ -204,15 +268,16 @@ const WeeklyCalendar: React.FC = () => {
                   {eventsInSlot.length > 0 && (
                     <div className="absolute inset-1 flex flex-col gap-1 overflow-auto max-h-full">
                       {eventsInSlot.map((ev) => (
-                        <div
+                        <button
                           key={ev.id}
-                          className={`text-xs font-medium rounded px-1 py-0.5 shadow-md truncate text-dark-900 ${
+                          onClick={() => handleEventClick(ev)}
+                          className={`text-xs text-left w-full font-medium rounded px-1 py-0.5 shadow-md truncate text-dark-900 ${
                             ev.color || "bg-limeyellow-400"
                           }`}
                           title={ev.title}
                         >
                           {ev.title}
-                        </div>
+                        </button>
                       ))}
                     </div>
                   )}
@@ -222,6 +287,67 @@ const WeeklyCalendar: React.FC = () => {
           </React.Fragment>
         ))}
       </div>
+
+      {/* Modal para acciones sobre el evento (eliminar / reagendar) */}
+      <ModalBase
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedEvent(null);
+        }}
+        title={selectedEvent ? selectedEvent.title : "Acciones"}
+      >
+        {!selectedEvent && <p>Sin evento seleccionado</p>}
+
+        {selectedEvent && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-sm text-text-secondary">Inicio:</p>
+              <p className="text-sm">{selectedEvent.start.toString()}</p>
+            </div>
+            <div>
+              <p className="text-sm text-text-secondary">Fin:</p>
+              <p className="text-sm">{selectedEvent.end.toString()}</p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="text-xs text-text-secondary">Nueva fecha/hora inicio</label>
+              <input
+                type="datetime-local"
+                value={newStartLocal}
+                onChange={(e) => setNewStartLocal(e.target.value)}
+                className="w-full bg-dark-800 border border-dark-600 px-2 py-1 rounded text-sm"
+              />
+
+              <label className="text-xs text-text-secondary">Nueva fecha/hora fin</label>
+              <input
+                type="datetime-local"
+                value={newEndLocal}
+                onChange={(e) => setNewEndLocal(e.target.value)}
+                className="w-full bg-dark-800 border border-dark-600 px-2 py-1 rounded text-sm"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                disabled={actionLoading}
+                onClick={async () => await handleReschedule()}
+                className="px-3 py-2 bg-dark-700 rounded text-sm hover:bg-dark-600 disabled:opacity-50"
+              >
+                {actionLoading ? "Guardando..." : "Reagendar"}
+              </button>
+
+              <button
+                disabled={actionLoading}
+                onClick={async () => await handleDelete()}
+                className="px-3 py-2 bg-red-600 rounded text-sm hover:opacity-90 disabled:opacity-50"
+              >
+                {actionLoading ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        )}
+      </ModalBase>
     </div>
   );
 };
