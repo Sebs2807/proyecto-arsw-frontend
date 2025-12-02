@@ -26,6 +26,7 @@ const WeeklyCalendar: React.FC = () => {
   const [actionLoading, setActionLoading] = React.useState(false);
   const [newStartLocal, setNewStartLocal] = React.useState<string>("");
   const [newEndLocal, setNewEndLocal] = React.useState<string>("");
+  const [newTitle, setNewTitle] = React.useState<string>("");
   const cacheRef = React.useRef<Record<string, CalendarEvent[]>>({});
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 });
@@ -117,6 +118,8 @@ const WeeklyCalendar: React.FC = () => {
     setSelectedEvent(ev);
     setNewStartLocal(toDatetimeLocalValue(ev.start));
     setNewEndLocal(toDatetimeLocalValue(ev.end));
+    setNewTitle(ev.title || "");
+    // description removed from UI
     setModalOpen(true);
   };
 
@@ -161,10 +164,16 @@ const WeeklyCalendar: React.FC = () => {
       const isoStart = new Date(newStartLocal).toISOString();
       const isoEnd = new Date(newEndLocal).toISOString();
 
-      await apiService.patch(`/v1/calendar/google-events/${selectedEvent.id}`, {
-        start: { dateTime: isoStart },
-        end: { dateTime: isoEnd },
-      });
+      // The backend RescheduleEventDto expects top-level startDateTime/endDateTime
+      const payload: any = {
+        startDateTime: isoStart,
+        endDateTime: isoEnd,
+      };
+
+      // Note: the current backend controller shown only uses these fields
+      // to reschedule. If you need to update title/description, the
+      // backend must accept those fields (or provide a separate endpoint).
+      await apiService.patch(`/v1/calendar/google-events/${selectedEvent.id}`, payload);
 
       setModalOpen(false);
       setSelectedEvent(null);
@@ -324,6 +333,15 @@ const WeeklyCalendar: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-2">
+              <label className="text-xs text-text-secondary">Título</label>
+              <input
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                className="w-full bg-dark-800 border border-dark-600 px-2 py-1 rounded text-sm"
+              />
+
+
               <label className="text-xs text-text-secondary">Nueva fecha/hora inicio</label>
               <input
                 type="datetime-local"
@@ -347,7 +365,7 @@ const WeeklyCalendar: React.FC = () => {
                 onClick={async () => await handleReschedule()}
                 className="px-3 py-2 bg-dark-700 rounded text-sm hover:bg-dark-600 disabled:opacity-50"
               >
-                {actionLoading ? "Guardando..." : "Reagendar"}
+                {actionLoading ? "Guardando..." : "Guardar cambios"}
               </button>
 
               <button
