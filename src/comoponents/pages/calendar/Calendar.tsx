@@ -124,13 +124,26 @@ const WeeklyCalendar: React.FC = () => {
     if (!selectedEvent) return;
     setActionLoading(true);
     try {
-      await apiService.delete(`/v1/calendar/google-events/${selectedEvent.id}`);
+      console.log("Deleting event id:", selectedEvent.id);
+      // Use apiService (axios) so baseURL and withCredentials are respected
+      const result = await apiService.delete(`/v1/calendar/google-events/${selectedEvent.id}`);
+      console.log("Delete result:", result);
+
+      // Resultado esperado del backend: { ok: true } o similar
       setModalOpen(false);
       setSelectedEvent(null);
       await loadWeek(currentWeek);
     } catch (err) {
       console.error("Error deleting event:", err);
-      alert("No se pudo eliminar el evento");
+      // Mostrar mensaje más descriptivo
+      // Si es un error de autorización probablemente sea 401/403: informar al usuario
+      if ((err as any)?.response?.status === 401) {
+        alert("No autorizado. Por favor inicia sesión de nuevo.");
+      } else if ((err as any)?.response?.status === 403) {
+        alert("Acceso denegado para eliminar este evento.");
+      } else {
+        alert("No se pudo eliminar el evento. Revisa la consola para más detalles.");
+      }
     } finally {
       setActionLoading(false);
     }
