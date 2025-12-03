@@ -29,7 +29,7 @@ interface Agent {
   maxTokens: number;
   flowConfig?: any;
   boards: Board[];
-  lists: List[]; // ✅ Agregado
+  lists: List[];
   workspaceId: string;
 }
 

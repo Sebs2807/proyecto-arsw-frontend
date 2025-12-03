@@ -6,8 +6,8 @@ export type SynapseButtonProps = {
   selected: string;
   navigationPath: string;
   handleSelect: (id: string, path?: string) => void;
-  text?: string; // Texto opcional
-  disabled?: boolean; // <-- NUEVO
+  text?: string;
+  disabled?: boolean;
 };
 
 const SynapseButton: React.FC<SynapseButtonProps> = ({
@@ -21,17 +21,6 @@ const SynapseButton: React.FC<SynapseButtonProps> = ({
 }) => {
   const isSelected = selected === id;
   const hasText = Boolean(text);
-
-  let buttonClass = "";
-
-  if (hasText) {
-    buttonClass = "ml-1";
-  } else if (isSelected) {
-    buttonClass = "bg-limeyellow-500 text-text-primary";
-  } else {
-    buttonClass =
-      "bg-dark-600 text-dark-700 hover:bg-limeyellow-400 hover:text-text-primary";
-  }
 
   return (
     <div
