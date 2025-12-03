@@ -88,7 +88,9 @@ const BoardsSidebar: React.FC = () => {
 
         const boardsData = response?.items ?? [];
 
-        setBoards((prev) => (replace ? boardsData : mergeBoards(prev, boardsData)));
+        setBoards((prev) =>
+          replace ? boardsData : mergeBoards(prev, boardsData)
+        );
 
         setHasMore(boardsData.length === LIMIT);
       } catch (err) {
