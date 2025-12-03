@@ -187,13 +187,12 @@ const KnowledgeManager: React.FC = () => {
   }, [page, searchTerm, activeWorkspaceId, CONFIG]);
 
   useEffect(() => {
-    let isMounted = true;
     const fetch = async () => {
       await fetchData();
     };
     fetch();
     return () => {
-      isMounted = false;
+      // cleanup
     };
   }, [fetchData]);
 
