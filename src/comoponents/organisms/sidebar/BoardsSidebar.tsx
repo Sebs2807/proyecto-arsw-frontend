@@ -25,9 +25,21 @@ const COLOR_PALETTE = [
 
 const stringToColor = (s: string) => {
   let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
+  for (const char of s) {
+    const code = char.codePointAt(0) ?? 0;
+    h = (h << 5) - h + code;
+  }
   const idx = Math.abs(h) % COLOR_PALETTE.length;
   return COLOR_PALETTE[idx];
+};
+
+const isNewBoard = (prevBoards: Board[], board: Board) => {
+  return !prevBoards.some((existing) => existing.id === board.id);
+};
+
+const mergeBoards = (prevBoards: Board[], newBoards: Board[]) => {
+  const uniqueNewBoards = newBoards.filter((b) => isNewBoard(prevBoards, b));
+  return [...prevBoards, ...uniqueNewBoards];
 };
 
 const LIMIT = 10;
@@ -76,16 +88,7 @@ const BoardsSidebar: React.FC = () => {
 
         const boardsData = response?.items ?? [];
 
-        setBoards((prev) =>
-          replace
-            ? boardsData
-            : [
-                ...prev,
-                ...boardsData.filter(
-                  (b) => !prev.some((existing) => existing.id === b.id)
-                ),
-              ]
-        );
+        setBoards((prev) => (replace ? boardsData : mergeBoards(prev, boardsData)));
 
         setHasMore(boardsData.length === LIMIT);
       } catch (err) {

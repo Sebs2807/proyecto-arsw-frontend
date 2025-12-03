@@ -14,7 +14,7 @@ vi.mock("../../../../src/services/api/ApiService", () => ({
     delete: vi.fn(),
     initSocket: vi.fn(),
     disconnectSocket: vi.fn(),
-    socket: { on: vi.fn(), emit: vi.fn() },
+    socket: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
   },
 }));
 

@@ -11,12 +11,18 @@ import ModalBase from "../../atoms/ModalBase";
 import { RiCalendarScheduleFill } from "react-icons/ri";
 import { IoIosSend } from "react-icons/io";
 import { FaPhone } from "react-icons/fa";
+import { BsFillTelephoneForwardFill } from "react-icons/bs";
+// Asegúrate de definir esta constante o reemplazarla con un valor fijo si no usas el archivo de constantes
+const LIVEKIT_ACTIVE_ROOM_KEY = "livekit_active_room_id";
+const LIVEKIT_ACTIVE_BOARD_KEY = "livekit_active_board_id";
+
+// --- Interfaces de Datos (Tomadas del primer bloque, más completas) ---
 
 export interface Task {
   id: string;
   title: string;
   description?: string;
-  status: string;
+  status: string; // Se mantiene por si se usa en el backend, aunque no se usa en la UI directamente
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;
@@ -34,75 +40,218 @@ export interface List {
   cards: Task[];
 }
 
+// --- Portal para el Drag Overlay ---
 const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  if (typeof window === "undefined") return null;
+  // Uso de globalThis para mejor compatibilidad universal (navegador/SSR)
+  if (globalThis.window === undefined) return null;
   const portal = document.getElementById("drag-portal");
-  return ReactDOM.createPortal(children, portal ?? document.body);
+  return ReactDOM.createPortal(
+    children,
+    portal ?? globalThis.window.document.body
+  );
 };
+
+// --- Componente de Tarjeta Draggable (del segundo bloque, con indicador de llamada) ---
+const renderDraggableCard = ({
+  task,
+  user,
+  provided,
+  snapshot,
+  draggingCards,
+  draggingNames,
+  activeCalls,
+  setEditingTask,
+  setModalTitle,
+  setModalDescription,
+  // Campos extra del primer bloque
+  setModalContactName,
+  setModalContactEmail,
+  setModalContactPhone,
+  setModalIndustry,
+  setModalPriority,
+}: any) => {
+  const isBeingDraggedByAnother =
+    draggingCards[task.id] && draggingCards[task.id].user !== user?.email;
+
+  const handleClick = () => {
+    if (!isBeingDraggedByAnother) {
+      setEditingTask(task);
+      setModalTitle(task.title ?? "");
+      setModalDescription(task.description ?? "");
+      // Inicializar campos adicionales del modal
+      setModalContactName(task.contactName ?? "");
+      setModalContactEmail(task.contactEmail ?? "");
+      setModalContactPhone(task.contactPhone ?? "");
+      setModalIndustry(task.industry ?? "");
+      setModalPriority(task.priority ?? "");
+    }
+  };
+
+  const card = (
+    <button
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      {...provided.dragHandleProps}
+      type="button"
+      onClick={handleClick}
+      className={`relative text-left w-full p-3 rounded-lg border text-sm transition-all duration-300
+        ${
+          snapshot.isDragging
+            ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
+            : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
+        }
+        ${isBeingDraggedByAnother ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      {isBeingDraggedByAnother && (
+        <span className="absolute top-1 left-1 text-xs bg-limeyellow-600 text-text-primary px-2 py-0.5 rounded-md shadow-md">
+          {draggingNames[task.id] || "Cargando..."}
+        </span>
+      )}
+
+      {activeCalls[task.id] && (
+        <span className="absolute top-1 right-1 text-[10px] transform -translate-y-1">
+          <BsFillTelephoneForwardFill size={16} color="rgb(101, 163, 13)" />{" "}
+          {/* Color verde/lima */}
+        </span>
+      )}
+
+      <h3 className="font-medium truncate text-text-primary">{task.title}</h3>
+
+      <p className="text-xs mt-1 line-clamp-2 text-text-muted">
+        {task.description}
+      </p>
+    </button>
+  );
+
+  return snapshot.isDragging ? (
+    <DragOverlayPortal>
+      <div className="pointer-events-none">{card}</div>
+    </DragOverlayPortal>
+  ) : (
+    card
+  );
+};
+
+// Curry function para el renderizado
+const draggableRenderer =
+  ({
+    task,
+    user,
+    draggingCards,
+    draggingNames,
+    activeCalls,
+    setEditingTask,
+    setModalTitle,
+    setModalDescription,
+    // Campos extra
+    setModalContactName,
+    setModalContactEmail,
+    setModalContactPhone,
+    setModalIndustry,
+    setModalPriority,
+  }: any) =>
+  (provided: any, snapshot: any) =>
+    renderDraggableCard({
+      task,
+      user,
+      provided,
+      snapshot,
+      draggingCards,
+      draggingNames,
+      activeCalls,
+      setEditingTask,
+      setModalTitle,
+      setModalDescription,
+      setModalContactName,
+      setModalContactEmail,
+      setModalContactPhone,
+      setModalIndustry,
+      setModalPriority,
+    });
+
+// --- Componente Principal Board ---
 
 const Board: React.FC = () => {
   const { selectedBoard } = useSelector((state: RootState) => state.workspace);
   const user = useSelector((state: RootState) => state.auth.user);
-  const [memberCache, setMemberCache] = React.useState<
+  const navigate = useNavigate();
+
+  // Estados del primer bloque
+  const [memberCache, setMemberCache] = useState<
     Record<string, { firstName: string; lastName: string }>
   >({});
-  const [draggingNames, setDraggingNames] = React.useState<
-    Record<string, string>
-  >({});
-  const [lists, setLists] = React.useState<List[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const [activeListId, setActiveListId] = React.useState<string | null>(null);
-  const [newTaskTitle, setNewTaskTitle] = React.useState("");
-  const [newTaskDescription, setNewTaskDescription] = React.useState("");
-  const [isCreating, setIsCreating] = React.useState(false);
-  const [newListTitle, setNewListTitle] = React.useState("");
+  const [draggingNames, setDraggingNames] = useState<Record<string, string>>(
+    {}
+  );
+  const [lists, setLists] = useState<List[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [activeListId, setActiveListId] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [newListTitle, setNewListTitle] = useState("");
 
-  const [editingTask, setEditingTask] = React.useState<Task | null>(null);
-  const [modalTitle, setModalTitle] = React.useState("");
-  const [modalDescription, setModalDescription] = React.useState("");
-  const [isSaving, setIsSaving] = React.useState(false);
-  const [isAddingList, setIsAddingList] = React.useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [modalTitle, setModalTitle] = useState("");
+  const [modalDescription, setModalDescription] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAddingList, setIsAddingList] = useState(false);
 
-  const [modalContactName, setModalContactName] = useState(
-    editingTask?.contactName ?? ""
-  );
-  const [modalContactEmail, setModalContactEmail] = useState(
-    editingTask?.contactEmail ?? ""
-  );
-  const [modalContactPhone, setModalContactPhone] = useState(
-    editingTask?.contactPhone ?? ""
-  );
-  const [modalIndustry, setModalIndustry] = useState(
-    editingTask?.industry ?? ""
-  );
-  const [modalPriority, setModalPriority] = useState(
-    editingTask?.priority ?? ""
-  );
-  // Tracks active calls per card/task (cardId -> { roomId, startedBy })
-  const [, setActiveCalls] = React.useState<
+  // Campos de edición de tarea (del primer bloque)
+  const [modalContactName, setModalContactName] = useState("");
+  const [modalContactEmail, setModalContactEmail] = useState("");
+  const [modalContactPhone, setModalContactPhone] = useState("");
+  const [modalIndustry, setModalIndustry] = useState("");
+  const [modalPriority, setModalPriority] = useState("");
+
+  // Estados del segundo bloque
+  const [activeCalls, setActiveCalls] = useState<
     Record<string, { roomId: string; startedBy?: string }>
   >({});
-
-  const [draggingCards, setDraggingCards] = React.useState<
+  const [draggingCards, setDraggingCards] = useState<
     Record<string, { user: string; destListId: string; destIndex: number }>
   >({});
 
-  useEffect(() => {
-    Object.entries(draggingCards).forEach(async ([cardId, info]) => {
-      if (!draggingNames[cardId]) {
-        const name = await getUserName(info.user);
-        setDraggingNames((prev) => ({ ...prev, [cardId]: name }));
-      }
-    });
-  }, [draggingCards]);
+  // Estados del modal de programación de llamadas
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleDateTime, setScheduleDateTime] = useState<string>(
+    new Date().toISOString().slice(0, 16)
+  );
+  const [scheduleDurationMinutes, setScheduleDurationMinutes] =
+    useState<number>(30);
+  const [scheduleAttendees, setScheduleAttendees] = useState<string>("");
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduledLinks, setScheduledLinks] = useState<{
+    htmlLink?: string;
+    googleAddUrl?: string;
+    icsUrl?: string;
+    shareLink?: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [scheduleRoomId, setScheduleRoomId] = useState<string | null>(null);
+  const [isJoiningCall, setIsJoiningCall] = useState(false);
 
+  // Dependencia del modal de edición para inicializar campos adicionales
   useEffect(() => {
+    if (editingTask) {
+      setModalContactName(editingTask.contactName ?? "");
+      setModalContactEmail(editingTask.contactEmail ?? "");
+      setModalContactPhone(editingTask.contactPhone ?? "");
+      setModalIndustry(editingTask.industry ?? "");
+      setModalPriority(editingTask.priority ?? "");
+    }
+  }, [editingTask]);
+
+  // Lógica de Sockets (Basada en el segundo bloque, más limpia)
+  useEffect(() => {
+    // ... Lógica para cargar listas inicialmente
     if (!selectedBoard?.id) {
       setError("No hay tablero seleccionado.");
       setLists([]);
+      setActiveCalls({});
       setLoading(false);
       return;
     }
@@ -120,84 +269,147 @@ const Board: React.FC = () => {
         setLoading(false);
       }
     };
-
     fetchLists(selectedBoard.id);
   }, [selectedBoard?.id]);
 
+  // Lógica de sincronización de nombres de arrastre
   useEffect(() => {
-    setModalContactName(editingTask?.contactName ?? "");
-    setModalContactEmail(editingTask?.contactEmail ?? "");
-    setModalContactPhone(editingTask?.contactPhone ?? "");
-    setModalIndustry(editingTask?.industry ?? "");
-    setModalPriority(editingTask?.priority ?? "");
-  }, [editingTask]);
+    const syncNames = async () => {
+      for (const [cardId, info] of Object.entries(draggingCards)) {
+        if (!draggingNames[cardId]) {
+          const name = await getUserName(info.user);
+          setDraggingNames((prev) => ({ ...prev, [cardId]: name }));
+        }
+      }
+    };
+    syncNames();
+  }, [draggingCards]);
 
+  // Lógica de Sockets (Combinada y refactorizada)
   useEffect(() => {
     if (!selectedBoard?.id) return;
-
     const boardId = selectedBoard.id;
 
-    apiService.initSocket(
-      (newList) =>
-        setLists((prev) =>
-          prev.some((l) => l.id === newList.id)
-            ? prev
-            : [...prev, { ...newList, cards: [] }]
-        ),
-      (updatedList) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === updatedList.id ? { ...l, ...updatedList } : l
-          )
-        ),
-      (id) => setLists((prev) => prev.filter((l) => l.id !== id)),
-      (listId, card) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? {
-                  ...l,
-                  cards: l.cards.some((c) => c.id === card.id)
-                    ? l.cards
-                    : [...l.cards, card],
-                }
-              : l
-          )
-        ),
-      (listId, card) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? {
-                  ...l,
-                  cards: l.cards.map((c) =>
-                    c.id === card.id ? { ...c, ...card } : c
-                  ),
-                }
-              : l
-          )
-        ),
-      (listId, cardId) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
-              : l
-          )
-        ),
-      (_sourceListId, destListId, card) =>
-        setLists((prev) => {
-          const withoutCard = prev.map((l) => ({
-            ...l,
-            cards: l.cards.filter((c) => c.id !== card.id),
-          }));
+    // --- Funciones auxiliares del segundo bloque (limpieza) ---
+    const listHasId = (id: string) => (list: List) => list.id === id;
+    const updateListItem = (updated: List) => (l: List) =>
+      l.id === updated.id ? { ...l, ...updated } : l;
+    const isNotId = (id: string) => (l: List) => l.id !== id;
+    const cardExists = (cardId: string) => (c: Task) => c.id === cardId;
+    const updateCard = (updatedCard: Task) => (c: Task) =>
+      c.id === updatedCard.id ? { ...c, ...updatedCard } : c;
+    const isNotCard = (card: Task, cardId: string): boolean =>
+      card.id !== cardId;
 
-          return withoutCard.map((l) =>
-            l.id === destListId ? { ...l, cards: [...l.cards, card] } : l
-          );
-        }),
-      boardId
-    );
+    const addCardToList = (listId: string, card: Task) => (l: List) => {
+      if (l.id !== listId) return l;
+      if (l.cards.some(cardExists(card.id))) return l;
+      return { ...l, cards: [...l.cards, card] };
+    };
+
+    const updateListCards = (listId: string, card: Task) => (l: List) =>
+      l.id === listId ? { ...l, cards: l.cards.map(updateCard(card)) } : l;
+
+    const removeCard = (lists: List[], cardId: string): List[] =>
+      lists.map((list) => ({
+        ...list,
+        cards: list.cards.filter((c) => isNotCard(c, cardId)),
+      }));
+    const addCard = (lists: List[], destListId: string, card: Task): List[] =>
+      lists.map((list) =>
+        list.id === destListId
+          ? { ...list, cards: [...list.cards, card] }
+          : list
+      );
+    const moveCard = (lists: List[], destListId: string, card: Task): List[] =>
+      addCard(removeCard(lists, card.id), destListId, card);
+
+    // --- Manejadores de Sockets (del segundo bloque) ---
+    const handleNewList = (newList: List) =>
+      setLists((prev) =>
+        prev.some(listHasId(newList.id))
+          ? prev
+          : [...prev, { ...newList, cards: [] }]
+      );
+    const handleUpdatedList = (updatedList: List) =>
+      setLists((prev) => prev.map(updateListItem(updatedList)));
+    const handleDeletedList = (id: string) =>
+      setLists((prev) => prev.filter(isNotId(id)));
+    const handleCardCreated = (listId: string, card: Task) =>
+      setLists((prev) => prev.map(addCardToList(listId, card)));
+    const handleCardUpdated = (listId: string, card: Task) =>
+      setLists((prev) => prev.map(updateListCards(listId, card)));
+    const handleCardDeleted = (listId: string, cardId: string) =>
+      setLists((prev) =>
+        prev.map((l) =>
+          l.id === listId
+            ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
+            : l
+        )
+      );
+    const handleCardMovedExternally = (
+      _sourceListId: string,
+      destListId: string,
+      card: Task
+    ) => setLists((prevLists) => moveCard(prevLists, destListId, card));
+
+    apiService.initSocket(boardId, {
+      onListCreated: handleNewList,
+      onListUpdated: handleUpdatedList,
+      onListDeleted: handleDeletedList,
+      onCardCreated: handleCardCreated,
+      onCardUpdated: handleCardUpdated,
+      onCardDeleted: handleCardDeleted,
+      onCardMoved: handleCardMovedExternally,
+    });
+
+    const requestActiveCalls = () => {
+      apiService.socket?.emit("call:requestState", { boardId });
+    };
+    const handleCallActiveSet = ({
+      boardId: payloadBoardId,
+      calls,
+    }: {
+      boardId: string;
+      calls: Array<{ cardId: string; roomId: string; startedBy?: string }>;
+    }) => {
+      if (payloadBoardId !== boardId) return;
+      const mapped: Record<string, { roomId: string; startedBy?: string }> = {};
+      for (const call of calls) {
+        if (call.cardId && call.roomId) {
+          mapped[call.cardId] = {
+            roomId: call.roomId,
+            startedBy: call.startedBy,
+          };
+        }
+      }
+      const activeRoomForThisClient =
+        globalThis.window === undefined
+          ? null
+          : globalThis.window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY);
+      const cleaned = { ...mapped };
+
+      // Lógica para limpiar llamadas que el usuario inició pero no está activo
+      for (const [cardId, info] of Object.entries(mapped)) {
+        const sameUser =
+          info.startedBy && info.startedBy === (user?.email ?? "");
+        const clientCurrentlyInRoom =
+          activeRoomForThisClient && activeRoomForThisClient === cardId;
+        if (sameUser && !clientCurrentlyInRoom) {
+          apiService.socket?.emit("call:ended", {
+            boardId,
+            cardId,
+            user: user?.email ?? "anonymous@example.com",
+          });
+          delete cleaned[cardId];
+        }
+      }
+      setActiveCalls(cleaned);
+    };
+
+    apiService.socket?.on("connect", requestActiveCalls);
+    apiService.socket?.on("call:activeSet", handleCallActiveSet);
+    requestActiveCalls();
 
     apiService.socket?.on("card:dragStart", ({ cardId, user }) => {
       setDraggingCards((prev) => ({
@@ -206,7 +418,6 @@ const Board: React.FC = () => {
       }));
     });
 
-    // Listen for call start/end events to show indicators on cards
     apiService.socket?.on("call:started", ({ cardId, roomId, user }) => {
       if (!cardId) return;
       setActiveCalls((prev) => ({
@@ -215,16 +426,58 @@ const Board: React.FC = () => {
       }));
     });
 
-    apiService.socket?.on("call:ended", ({ cardId }) => {
-      if (!cardId) return;
+    function removeActiveCall(cardId: string) {
       setActiveCalls((prev) => {
         const copy = { ...prev };
         delete copy[cardId];
         return copy;
       });
-    });
+    }
 
-    apiService.socket?.on("card:dragUpdate", (data) => {
+    function redirectToBoards() {
+      const path = globalThis.window?.location?.pathname;
+      const base = import.meta.env.VITE_FRONTEND_URL ?? "/"; // Asegúrate de que esto se resuelva
+      if (path?.startsWith("/livekit")) {
+        globalThis.window.location.href = `${base}/boards`;
+      } else {
+        navigate("/boards");
+      }
+    }
+    function clearSession() {
+      globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+      globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+    }
+    function handleRoomCleanup(cardId: string, endedBy: string) {
+      if (!globalThis.window) return;
+      const activeRoomId = globalThis.window.sessionStorage.getItem(
+        LIVEKIT_ACTIVE_ROOM_KEY
+      );
+      const isSameActiveRoom = activeRoomId === cardId;
+      const endedByMe = endedBy === cardId; // Asumiendo que el socket 'call:ended' ya hace la limpieza del estado
+      if (isSameActiveRoom || endedByMe) {
+        clearSession();
+        redirectToBoards();
+      }
+    }
+
+    apiService.socket?.on(
+      "call:ended",
+      ({
+        boardId: payloadBoardId,
+        cardId,
+        user: endedBy,
+      }: {
+        boardId?: string;
+        cardId?: string;
+        user?: string;
+      }) => {
+        if (!cardId || payloadBoardId !== boardId) return;
+        removeActiveCall(cardId);
+        handleRoomCleanup(cardId, endedBy ?? "");
+      }
+    );
+
+    function updateDraggingCards(data: any) {
       setDraggingCards((prev) => ({
         ...prev,
         [data.cardId]: {
@@ -233,81 +486,86 @@ const Board: React.FC = () => {
           destIndex: data.destIndex,
         },
       }));
+    }
 
-      setLists((prevLists) => {
-        const sourceListIndex = prevLists.findIndex((list) =>
-          list.cards.some((card) => card.id === data.cardId)
-        );
-        if (sourceListIndex === -1) return prevLists;
+    function applyDrag(lists: List[], data: any): List[] {
+      const card = lists
+        .flatMap((l) => l.cards)
+        .find((c) => c.id === data.cardId);
+      if (!card) return lists;
+      const moved = moveCard(lists, data.destListId, card);
+      const listIndex = moved.findIndex((l) => l.id === data.destListId);
+      if (listIndex === -1) return lists;
 
-        const destListIndex = prevLists.findIndex(
-          (list) => list.id === data.destListId
-        );
-        if (destListIndex === -1) return prevLists;
+      const newLists = [...moved];
+      const list = { ...newLists[listIndex] };
+      list.cards = list.cards.filter((c) => c.id !== data.cardId);
+      list.cards.splice(data.destIndex, 0, card);
+      newLists[listIndex] = list;
 
-        const newLists = [...prevLists];
-        const sourceList = { ...newLists[sourceListIndex] };
-        const destList = { ...newLists[destListIndex] };
+      return newLists;
+    }
 
-        const card = sourceList.cards.find((c) => c.id === data.cardId);
-        if (!card) return prevLists;
-
-        sourceList.cards = sourceList.cards.filter((c) => c.id !== card.id);
-        destList.cards = destList.cards.filter((c) => c.id !== card.id);
-
-        destList.cards.splice(data.destIndex, 0, card);
-
-        newLists[sourceListIndex] = sourceList;
-        newLists[destListIndex] = destList;
-
-        return newLists;
-      });
+    apiService.socket?.on("card:dragUpdate", (data) => {
+      updateDraggingCards(data);
+      setLists((prevLists) => applyDrag(prevLists, data));
     });
+
+    function clearDraggingCard(cardId: string) {
+      setDraggingCards((prev) => {
+        const copy = { ...prev };
+        delete copy[cardId];
+        return copy;
+      });
+    }
+
+    function applyDragEnd(
+      lists: List[],
+      cardId: string,
+      destListId: string,
+      destIndex: number
+    ): List[] {
+      const sourceIndex = lists.findIndex((l) =>
+        l.cards.some((c) => c.id === cardId)
+      );
+      const destIndexList = lists.findIndex((l) => l.id === destListId);
+      if (sourceIndex === -1 || destIndexList === -1) return lists;
+
+      const card = lists[sourceIndex].cards.find((c) => c.id === cardId);
+      if (!card) return lists;
+
+      const newLists = [...lists];
+      const sourceList = { ...newLists[sourceIndex] };
+      const destList = { ...newLists[destIndexList] };
+
+      sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
+      destList.cards = destList.cards.filter((c) => c.id !== cardId);
+      destList.cards.splice(destIndex, 0, card);
+
+      newLists[sourceIndex] = sourceList;
+      newLists[destIndexList] = destList;
+      return newLists;
+    }
 
     apiService.socket?.on(
       "card:dragEnd",
       ({ cardId, destListId, destIndex }) => {
-        setDraggingCards((prev) => {
-          const copy = { ...prev };
-          delete copy[cardId];
-          return copy;
-        });
-
-        if (destListId && destIndex !== undefined) {
-          setLists((prevLists) => {
-            const allLists = [...prevLists];
-            const sourceListIndex = allLists.findIndex((l) =>
-              l.cards.some((c) => c.id === cardId)
-            );
-            const destListIndex = allLists.findIndex(
-              (l) => l.id === destListId
-            );
-            if (sourceListIndex === -1 || destListIndex === -1)
-              return prevLists;
-
-            const newLists = [...allLists];
-            const sourceList = { ...newLists[sourceListIndex] };
-            const destList = { ...newLists[destListIndex] };
-
-            const card = sourceList.cards.find((c) => c.id === cardId);
-            if (!card) return prevLists;
-
-            sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
-            destList.cards = destList.cards.filter((c) => c.id !== cardId);
-            destList.cards.splice(destIndex, 0, card);
-
-            newLists[sourceListIndex] = sourceList;
-            newLists[destListIndex] = destList;
-            return newLists;
-          });
-        }
+        clearDraggingCard(cardId);
+        if (!destListId || destIndex === undefined) return;
+        setLists((prevLists) =>
+          applyDragEnd(prevLists, cardId, destListId, destIndex)
+        );
       }
     );
 
     return () => {
+      apiService.socket?.off("connect", requestActiveCalls);
+      apiService.socket?.off("call:activeSet", handleCallActiveSet);
       apiService.disconnectSocket();
     };
-  }, [selectedBoard?.id]);
+  }, [selectedBoard?.id, user?.email]);
+
+  // --- Funciones del Board (Combinadas) ---
 
   const handleDragEnd = async (result: DropResult) => {
     const { destination, source, draggableId } = result;
@@ -324,12 +582,10 @@ const Board: React.FC = () => {
     );
     if (sourceListIndex === -1 || destListIndex === -1) return;
 
+    // Actualización optimista de la UI
     const newLists = [...lists];
     const [movedTask] = newLists[sourceListIndex].cards.splice(source.index, 1);
-    const taskWithNewListId = {
-      ...movedTask,
-      listId: destination.droppableId,
-    };
+    const taskWithNewListId = { ...movedTask, listId: destination.droppableId };
     newLists[destListIndex].cards.splice(
       destination.index,
       0,
@@ -337,6 +593,7 @@ const Board: React.FC = () => {
     );
     setLists(newLists);
 
+    // Notificación a otros clientes (tiempo real)
     apiService.socket?.emit("card:moved", {
       boardId: selectedBoard?.id,
       cardId: draggableId,
@@ -345,15 +602,19 @@ const Board: React.FC = () => {
       destinationIndex: destination.index,
     });
 
+    // Petición al backend
     try {
-      await apiService.put(`/v1/cards/${draggableId}`, {
+      // El segundo bloque usa PUT, el primero PATCH/PUT. Usamos PATCH para actualizar solo listId.
+      await apiService.patch(`/v1/cards/${draggableId}`, {
         listId: destination.droppableId,
-        sourceListId: source.droppableId,
+        sourceListId: source.droppableId, // Enviamos el source list también
       });
     } catch (err) {
       console.error("Error al mover la tarea:", err);
+      // Opcional: Revertir el estado (handle error)
     }
 
+    // Notificación de fin de arrastre para limpiar el estado 'draggingCards' en otros clientes
     apiService.socket?.emit("card:dragEnd", {
       boardId: selectedBoard?.id,
       cardId: draggableId,
@@ -363,34 +624,62 @@ const Board: React.FC = () => {
     });
   };
 
-  const navigate = useNavigate();
+  const getUserName = async (email?: string) => {
+    if (!email) return "Anónimo";
+
+    if (memberCache[email]) {
+      return `${memberCache[email].firstName} ${memberCache[email].lastName}`;
+    }
+
+    try {
+      const member = await apiService.get<{
+        firstName: string;
+        lastName: string;
+      }>(`/v1/users/${encodeURIComponent(email)}`);
+      setMemberCache((prev) => ({ ...prev, [email]: member }));
+      return `${member.firstName} ${member.lastName}`;
+    } catch {
+      return "Anónimo";
+    }
+  };
 
   const handleLiveKit = async (roomId: string, email: string) => {
+    setIsJoiningCall(true);
     try {
       let name = memberCache[email]
         ? `${memberCache[email].firstName} ${memberCache[email].lastName}`
         : null;
-
       if (!name) {
         const member = await apiService.get<{
           firstName: string;
           lastName: string;
         }>(`/v1/users/${encodeURIComponent(email)}`);
-
-        const fullName = `${member.firstName} ${member.lastName}`;
-        name = fullName;
-
-        setMemberCache((prev) => ({
-          ...prev,
-          [email]: member,
-        }));
+        name = `${member.firstName} ${member.lastName}`;
+        setMemberCache((prev) => ({ ...prev, [email]: member }));
       }
 
+      const baseIdentity = (
+        user?.email ||
+        name ||
+        `guest-${Date.now()}`
+      ).replaceAll(/[^a-zA-Z0-9_-]/g, "_");
+      const randomSuffix =
+        globalThis.crypto?.randomUUID?.()?.slice(0, 8) ??
+        Date.now().toString(16).slice(0, 8);
+      const uniqueIdentity = `${baseIdentity}-${randomSuffix}`;
+      const displayName = name ?? "Invitado";
+
+      const params = new URLSearchParams({
+        room: roomId,
+        identity: uniqueIdentity,
+        name: displayName,
+      });
+
       const { token } = await apiService.get<{ token: string }>(
-        `/livekit/token?room=${roomId}&name=${encodeURIComponent(name)}`
+        `/livekit/token?${params.toString()}`
       );
 
-      // Notify others that this card/room has an active call
+      // Notificar inicio de llamada
       try {
         apiService.socket?.emit("call:started", {
           boardId: selectedBoard?.id,
@@ -403,37 +692,44 @@ const Board: React.FC = () => {
           [roomId]: { roomId, startedBy: user?.email },
         }));
       } catch (e) {
-        // ignore emit errors
+        console.error("Error starting call:", e);
       }
 
-      navigate(`/livekit/${roomId}/${token}`);
+      // Almacenar en sesión (para manejo de limpieza)
+      if (globalThis.window !== undefined) {
+        globalThis.window.sessionStorage.setItem(
+          LIVEKIT_ACTIVE_ROOM_KEY,
+          roomId
+        );
+        if (selectedBoard?.id) {
+          globalThis.window.sessionStorage.setItem(
+            LIVEKIT_ACTIVE_BOARD_KEY,
+            selectedBoard.id
+          );
+        }
+      }
+
+      navigate(`/livekit/${roomId}/${token}`, {
+        state: { boardId: selectedBoard?.id, cardId: roomId },
+      });
     } catch (err) {
       console.error("Error al generar token de LiveKit:", err);
+      if (globalThis.window !== undefined) {
+        globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+        globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+      }
+      setActiveCalls((prev) => {
+        const copy = { ...prev };
+        delete copy[roomId];
+        return copy;
+      });
+    } finally {
+      setIsJoiningCall(false);
     }
   };
 
-  const [isScheduleModalOpen, setIsScheduleModalOpen] = React.useState(false);
-  const [scheduleDateTime, setScheduleDateTime] = React.useState<string>(
-    new Date().toISOString().slice(0, 16)
-  );
-  const [scheduleDurationMinutes, setScheduleDurationMinutes] =
-    React.useState<number>(30);
-  const [scheduleAttendees, setScheduleAttendees] = React.useState<string>("");
-  const [isScheduling, setIsScheduling] = React.useState(false);
-  const [scheduledLinks, setScheduledLinks] = React.useState<{
-    htmlLink?: string;
-    googleAddUrl?: string;
-    icsUrl?: string;
-    shareLink?: string;
-  } | null>(null);
-  const [copied, setCopied] = React.useState(false);
-  const [scheduleRoomId, setScheduleRoomId] = React.useState<string | null>(
-    null
-  );
-
-  const formatForGoogleDates = (d: Date) => {
-    return d.toISOString().replace(/-|:|\.\d{3}/g, "");
-  };
+  const formatForGoogleDates = (d: Date) =>
+    d.toISOString().replaceAll(/-|:|\.\d{3}/g, "");
 
   const generateICS = (opts: {
     uid: string;
@@ -453,9 +749,9 @@ const Board: React.FC = () => {
       url = "",
       attendees = [],
     } = opts;
-    const dtstamp = new Date().toISOString().replace(/-|:|\.\d{3}/g, "");
-    const dtstart = start.toISOString().replace(/-|:|\.\d{3}/g, "");
-    const dtend = end.toISOString().replace(/-|:|\.\d{3}/g, "");
+    const dtstamp = new Date().toISOString().replaceAll(/-|:|\.\d{3}/g, "");
+    const dtstart = start.toISOString().replaceAll(/-|:|\.\d{3}/g, "");
+    const dtend = end.toISOString().replaceAll(/-|:|\.\d{3}/g, "");
     const attendeesLines = attendees
       .map((a) => `ATTENDEE:mailto:${a}`)
       .join("\r\n");
@@ -502,7 +798,6 @@ const Board: React.FC = () => {
         `/v1/calendar/google-events`,
         payload
       );
-
       const created = resp && (resp.data || resp) ? resp.data || resp : resp;
       const htmlLink: string | undefined =
         created?.htmlLink ||
@@ -518,8 +813,9 @@ const Board: React.FC = () => {
       if (opts.description)
         addUrl.searchParams.set("details", opts.description);
       addUrl.searchParams.set("dates", googleDates);
-      if (opts.attendees && opts.attendees.length)
+      if (opts.attendees?.length) {
         addUrl.searchParams.set("add", opts.attendees.join(","));
+      }
 
       const uid = created?.id || `synapse-${Date.now()}`;
       const ics = generateICS({
@@ -533,8 +829,8 @@ const Board: React.FC = () => {
       });
       const blob = new Blob([ics], { type: "text/calendar" });
       const icsUrl = URL.createObjectURL(blob);
-
       const shareLink = htmlLink || addUrl.toString();
+
       setScheduledLinks({
         htmlLink,
         googleAddUrl: addUrl.toString(),
@@ -565,8 +861,26 @@ const Board: React.FC = () => {
     }
   };
 
+  const handleEditListTitle = async (list: List) => {
+    const title = globalThis?.window?.prompt(
+      "Nuevo título de la lista:",
+      list.title
+    );
+    const newTitle = title?.trim();
+    if (!newTitle) return;
+    try {
+      await apiService.put<List>(`/v1/lists/${list.id}`, { title: newTitle });
+      setLists((prev) =>
+        prev.map((l) => (l.id === list.id ? { ...l, title: newTitle } : l))
+      );
+    } catch {
+      alert("No se pudo actualizar la lista");
+    }
+  };
+
   const handleDeleteList = async (listId: string) => {
-    if (!window.confirm("¿Seguro que deseas eliminar esta lista?")) return;
+    if (!globalThis.window?.confirm("¿Seguro que deseas eliminar esta lista?"))
+      return;
     try {
       await apiService.delete(`/v1/lists/${listId}`);
     } catch {
@@ -574,47 +888,132 @@ const Board: React.FC = () => {
     }
   };
 
-  const getUserName = async (email?: string) => {
-    if (!email) return "Anónimo";
-
-    if (memberCache[email]) {
-      return `${memberCache[email].firstName} ${memberCache[email].lastName}`;
-    }
-
-    try {
-      const member = await apiService.get<{
-        firstName: string;
-        lastName: string;
-      }>(`/v1/users/${encodeURIComponent(email)}`);
-      setMemberCache((prev) => ({ ...prev, [email]: member }));
-      return `${member.firstName} ${member.lastName}`;
-    } catch {
-      return "Anónimo";
-    }
-  };
-
   const handleCreateTask = async (listId: string) => {
     if (!newTaskTitle.trim()) return;
-
     setIsCreating(true);
     try {
       await apiService.post<Task>("/v1/cards", {
-        title: newTaskTitle,
-        description: newTaskDescription || "Sin descripción",
-        listId: listId,
+        cardData: {
+          title: newTaskTitle,
+          description: newTaskDescription || "Sin descripción",
+        },
+        listId,
       });
-
       setNewTaskTitle("");
       setNewTaskDescription("");
       setActiveListId(null);
-    } catch (err) {
-      console.error(err);
+    } catch {
       alert("Error al crear la tarea");
     } finally {
       setIsCreating(false);
     }
   };
 
+  const handleDeleteTask = async () => {
+    if (!editingTask) return;
+    if (!globalThis.window?.confirm("¿Seguro que deseas eliminar esta tarea?"))
+      return;
+
+    try {
+      await apiService.delete(`/v1/cards/${editingTask.id}`);
+      setLists((prev) =>
+        prev.map((l) => ({
+          ...l,
+          cards: l.cards.filter((c) => c.id !== editingTask.id),
+        }))
+      );
+      setEditingTask(null);
+    } catch (err) {
+      console.error("Error eliminando tarea:", err);
+      alert("Error al eliminar la tarea");
+    }
+  };
+
+  const updateCardInList = (
+    list: List,
+    cardId: string,
+    updatedCard: Partial<Task>
+  ): List => ({
+    ...list,
+    cards: list.cards.map((c) =>
+      c.id === cardId
+        ? {
+            ...c,
+            ...updatedCard,
+          }
+        : c
+    ),
+  });
+
+  const applyCardUpdate = (
+    cardId: string,
+    updatedCard: Partial<Task>
+  ): void => {
+    setLists((prev) =>
+      prev.map((l) => updateCardInList(l, cardId, updatedCard))
+    );
+  };
+
+  const handleSaveTask = async () => {
+    if (!editingTask) return;
+    setIsSaving(true);
+    const editingId = editingTask.id;
+
+    try {
+      const rawPayload = {
+        title: modalTitle,
+        description: modalDescription,
+        contactName: modalContactName,
+        contactEmail: modalContactEmail,
+        contactPhone: modalContactPhone,
+        industry: modalIndustry,
+        priority: modalPriority,
+      };
+      // Filtra campos vacíos/nulos/undefined
+      const payload = Object.fromEntries(
+        Object.entries(rawPayload).filter(
+          ([, v]) => v !== "" && v !== undefined && v !== null
+        )
+      ) as Partial<Task>;
+
+      const resp = await apiService.patch(`/v1/cards/${editingId}`, payload);
+      const updated = resp && (resp as any).data ? (resp as any).data : payload; // Usa la respuesta si es completa, sino usa el payload
+
+      applyCardUpdate(editingId, updated);
+      setEditingTask(null);
+    } catch (err) {
+      console.error(err);
+      alert("Error al guardar la tarea");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const currentScheduleCardId =
+    scheduleRoomId ?? (editingTask ? editingTask.id : null);
+  const hasActiveCall = currentScheduleCardId
+    ? Boolean(activeCalls[currentScheduleCardId])
+    : false;
+
+  const actionLabel = (() => {
+    if (isScheduling || isJoiningCall) {
+      return "Procesando...";
+    }
+    if (hasActiveCall) {
+      return (
+        <>
+          Unirse a llamada <FaPhone />
+        </>
+      );
+    }
+    return (
+      <>
+        Crear llamada <FaPhone />
+      </>
+    );
+  })();
+
+  // --- Renderizado ---
   if (error) return <p className="text-center text-text-error">{error}</p>;
   if (!selectedBoard)
     return (
@@ -631,6 +1030,7 @@ const Board: React.FC = () => {
         {selectedBoard.title}
       </h1>
 
+      {/* Kanban Board Layout */}
       <DragDropContext
         onDragStart={(start) => {
           apiService.socket?.emit("card:dragStart", {
@@ -639,6 +1039,7 @@ const Board: React.FC = () => {
             user: user?.email ?? "anonymous@example.com",
           });
 
+          // Agregar listener de mousemove para notificar 'dragUpdate' (del primer bloque)
           const handleMouseMove = (e: MouseEvent) => {
             apiService.socket?.emit("card:dragUpdate", {
               boardId: selectedBoard?.id,
@@ -649,12 +1050,15 @@ const Board: React.FC = () => {
             });
           };
 
-          window.addEventListener("mousemove", handleMouseMove);
+          globalThis.window?.addEventListener("mousemove", handleMouseMove);
 
-          window.addEventListener(
+          globalThis.window?.addEventListener(
             "mouseup",
             () => {
-              window.removeEventListener("mousemove", handleMouseMove);
+              globalThis.window?.removeEventListener(
+                "mousemove",
+                handleMouseMove
+              );
             },
             { once: true }
           );
@@ -682,35 +1086,13 @@ const Board: React.FC = () => {
                     {...provided.droppableProps}
                     className="flex-shrink-0 w-[300px] bg-dark-800 rounded-lg border border-dark-600 p-4 flex flex-col"
                   >
+                    {/* Encabezado de la lista */}
                     <div className="flex justify-between items-center mb-4">
                       <h2 className="text-lg font-semibold truncate">
                         {list.title} ({list.cards.length})
                       </h2>
                       <div className="flex gap-2">
-                        <button
-                          onClick={async () => {
-                            const title = window.prompt(
-                              "Nuevo título de la lista:",
-                              list.title
-                            );
-                            if (!title || !title.trim()) return;
-                            try {
-                              await apiService.put<List>(
-                                `/v1/lists/${list.id}`,
-                                { title: title.trim() }
-                              );
-                              setLists((prev) =>
-                                prev.map((l) =>
-                                  l.id === list.id
-                                    ? { ...l, title: title.trim() }
-                                    : l
-                                )
-                              );
-                            } catch {
-                              alert("No se pudo actualizar la lista");
-                            }
-                          }}
-                        >
+                        <button onClick={() => handleEditListTitle(list)}>
                           <Pencil size={16} />
                         </button>
                         <button onClick={() => handleDeleteList(list.id)}>
@@ -719,6 +1101,7 @@ const Board: React.FC = () => {
                       </div>
                     </div>
 
+                    {/* Contenedor de tarjetas */}
                     <div className="flex flex-col gap-3 overflow-y-auto flex-1 pr-1">
                       {list.cards.map((task, index) => (
                         <Draggable
@@ -730,66 +1113,26 @@ const Board: React.FC = () => {
                             draggingCards[task.id].user !== user?.email
                           }
                         >
-                          {(provided, snapshot) => {
-                            const isBeingDraggedByAnother =
-                              draggingCards[task.id] &&
-                              draggingCards[task.id].user !== user?.email;
-
-                            const card = (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`relative p-3 rounded-lg border text-sm transition-all duration-300 
-                                    ${
-                                      snapshot.isDragging
-                                        ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
-                                        : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
-                                    }
-                                    ${
-                                      isBeingDraggedByAnother
-                                        ? "opacity-50 cursor-not-allowed"
-                                        : ""
-                                    }`}
-                                onClick={() => {
-                                  if (!isBeingDraggedByAnother) {
-                                    setEditingTask(task);
-                                    setModalTitle(task.title ?? "");
-                                    setModalDescription(task.description ?? "");
-                                  }
-                                }}
-                              >
-                                {isBeingDraggedByAnother && (
-                                  <span className="absolute top-1 left-1 text-xs bg-limeyellow-600 text-text-primary px-2 py-0.5 rounded-md shadow-md">
-                                    {draggingNames[task.id] || "Cargando..."}
-                                    {""}
-                                  </span>
-                                )}
-
-                                <h3 className="font-medium truncate text-text-primary">
-                                  {task.title}
-                                </h3>
-                                <p className="text-xs mt-1 line-clamp-2 text-text-muted">
-                                  {task.description}
-                                </p>
-                                {/* action buttons moved into modal */}
-                              </div>
-                            );
-
-                            return snapshot.isDragging ? (
-                              <DragOverlayPortal>
-                                <div className="pointer-events-none">
-                                  {card}
-                                </div>
-                              </DragOverlayPortal>
-                            ) : (
-                              card
-                            );
-                          }}
+                          {draggableRenderer({
+                            task,
+                            user,
+                            draggingCards,
+                            draggingNames,
+                            activeCalls,
+                            setEditingTask,
+                            setModalTitle,
+                            setModalDescription,
+                            setModalContactName,
+                            setModalContactEmail,
+                            setModalContactPhone,
+                            setModalIndustry,
+                            setModalPriority,
+                          })}
                         </Draggable>
                       ))}
 
                       {provided.placeholder}
+                      {/* Formulario de creación de tarea */}
                       {activeListId === list.id ? (
                         <div className="mt-3 space-y-2 p-2 bg-dark-900 rounded-lg border border-dark-600">
                           <input
@@ -844,8 +1187,8 @@ const Board: React.FC = () => {
                 )}
               </Droppable>
             ))}
-            {/* Add-list card */}
-            <div className="flex-shrink-0 w-[300px] bg-dark-800 rounded-lg border border-dark-600 p-4 flex flex-col">
+            {/* Tarjeta para Añadir Lista */}
+            <div className="flex-shrink-0 w-[300px] bg-dark-800 rounded-lg border border-dark-600 p-4 flex flex-col self-start">
               {isAddingList ? (
                 <div className="flex flex-col gap-3">
                   <input
@@ -888,7 +1231,8 @@ const Board: React.FC = () => {
           </div>
         </div>
       </DragDropContext>
-      {/* Modal for viewing/editing a task (basic box for now) */}
+
+      {/* Modal de Edición de Tarea (combinado) */}
       <ModalBase
         isOpen={!!editingTask}
         onClose={() => setEditingTask(null)}
@@ -913,7 +1257,7 @@ const Board: React.FC = () => {
             placeholder="Descripción"
           />
 
-          {/* Contacto */}
+          {/* Campos adicionales (del primer bloque) */}
           <input
             type="text"
             value={modalContactName}
@@ -959,28 +1303,11 @@ const Board: React.FC = () => {
             <option value="high">Alta</option>
           </select>
 
-          {/* Footer */}
+          {/* Footer de Acciones */}
           <div className="flex justify-between items-center mt-3">
             {/* Botón eliminar */}
             <button
-              onClick={async () => {
-                if (!editingTask) return;
-                if (!window.confirm("¿Seguro que deseas eliminar esta tarea?"))
-                  return;
-
-                try {
-                  await apiService.delete(`/v1/cards/${editingTask.id}`);
-                  setLists((prev) =>
-                    prev.map((l) => ({
-                      ...l,
-                      cards: l.cards.filter((c) => c.id !== editingTask.id),
-                    }))
-                  );
-                  setEditingTask(null);
-                } catch (err) {
-                  alert("Error al eliminar la tarea");
-                }
-              }}
+              onClick={handleDeleteTask}
               className="px-2 py-1 text-text-error hover:text-text-secondary rounded transition flex items-center gap-2"
             >
               <Trash2 size={16} /> Eliminar
@@ -993,7 +1320,7 @@ const Board: React.FC = () => {
                   if (!editingTask) return;
                   setScheduleRoomId(editingTask.id);
                   setScheduleDateTime(new Date().toISOString().slice(0, 16));
-                  setScheduleAttendees("");
+                  setScheduleAttendees(editingTask.contactEmail || ""); // Usa el email del contacto como asistente predeterminado
                   setScheduledLinks(null);
                   setIsScheduleModalOpen(true);
                 }}
@@ -1012,54 +1339,9 @@ const Board: React.FC = () => {
 
               {/* Guardar */}
               <button
-                onClick={async () => {
-                  if (!editingTask) return;
-
-                  setIsSaving(true);
-                  const editingId = editingTask.id;
-
-                  try {
-                    const rawPayload = {
-                      title: modalTitle,
-                      description: modalDescription,
-                      contactName: modalContactName,
-                      contactEmail: modalContactEmail,
-                      contactPhone: modalContactPhone,
-                      industry: modalIndustry,
-                      priority: modalPriority,
-                    };
-
-                    const payload = Object.fromEntries(
-                      Object.entries(rawPayload).filter(
-                        ([, v]) => v !== "" && v !== undefined && v !== null
-                      )
-                    );
-
-                    const resp = await apiService.patch(
-                      `/v1/cards/${editingId}`,
-                      payload
-                    );
-                    const updated = resp ?? {};
-
-                    setLists((prev) =>
-                      prev.map((l) => ({
-                        ...l,
-                        cards: l.cards.map((c) =>
-                          c.id === editingId ? { ...c, ...updated } : c
-                        ),
-                      }))
-                    );
-
-                    setEditingTask(null);
-                  } catch (err) {
-                    console.error(err);
-                    alert("Error al guardar la tarea");
-                  } finally {
-                    setIsSaving(false);
-                  }
-                }}
+                onClick={handleSaveTask}
                 disabled={isSaving}
-                className="px-2 py-1 text-text-accent hover:text-text-secondary rounded transition"
+                className="px-2 py-1 text-limeyellow-500 hover:text-limeyellow-400 rounded transition"
               >
                 {isSaving ? "Guardando..." : "Guardar"}
               </button>
@@ -1068,24 +1350,40 @@ const Board: React.FC = () => {
         </div>
       </ModalBase>
 
-      {/* Scheduling modal */}
+      {/* Modal de Programación/Unión de Llamada (combinado) */}
       <ModalBase
         isOpen={isScheduleModalOpen}
         onClose={() => {
-          if (scheduledLinks?.icsUrl)
+          if (scheduledLinks?.icsUrl) {
             try {
               URL.revokeObjectURL(scheduledLinks.icsUrl);
-            } catch {}
+            } catch (err) {
+              console.error("Error revocando URL:", err);
+            }
+          }
           setIsScheduleModalOpen(false);
           setScheduledLinks(null);
           setScheduleRoomId(null);
+          setIsJoiningCall(false);
         }}
-        title={"Agendar llamada"}
+        title={"Agendar/Iniciar Llamada"}
         width="max-w-lg"
       >
         <div className="space-y-4 mt-2">
-          <label className="block text-sm text-text-muted">Fecha y hora</label>
+          {hasActiveCall && (
+            <div className="p-2 rounded border border-limeyellow-600 bg-dark-900 text-xs text-limeyellow-400">
+              Ya existe una llamada activa para esta tarjeta. Únete para
+              continuar.
+            </div>
+          )}
+          <label
+            htmlFor="scheduleDateTime"
+            className="block text-sm text-text-muted"
+          >
+            Fecha y hora
+          </label>
           <input
+            id="scheduleDateTime"
             type="datetime-local"
             value={scheduleDateTime}
             onChange={(e) => setScheduleDateTime(e.target.value)}
@@ -1094,10 +1392,14 @@ const Board: React.FC = () => {
 
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="block text-sm text-text-muted">
+              <label
+                htmlFor="scheduleDurationMinutes"
+                className="block text-sm text-text-muted"
+              >
                 Duración (min)
               </label>
               <input
+                id="scheduleDurationMinutes"
                 type="number"
                 value={scheduleDurationMinutes}
                 onChange={(e) =>
@@ -1108,10 +1410,14 @@ const Board: React.FC = () => {
               />
             </div>
             <div className="flex-1">
-              <label className="block text-sm text-text-muted">
+              <label
+                htmlFor="scheduleAttendees"
+                className="block text-sm text-text-muted"
+              >
                 Asistentes (coma-separado)
               </label>
               <input
+                id="scheduleAttendees"
                 type="text"
                 value={scheduleAttendees}
                 onChange={(e) => setScheduleAttendees(e.target.value)}
@@ -1144,7 +1450,7 @@ const Board: React.FC = () => {
                   alert("Error creando invitación. Revisa la consola.");
                 }
               }}
-              disabled={isScheduling}
+              disabled={isScheduling || isJoiningCall}
               className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-limeyellow-500 text-white rounded-lg"
             >
               {isScheduling ? (
@@ -1159,52 +1465,51 @@ const Board: React.FC = () => {
 
             <button
               onClick={async () => {
+                if (!scheduleRoomId) return;
                 try {
-                  const start = new Date(scheduleDateTime);
-                  const end = new Date(
-                    start.getTime() + scheduleDurationMinutes * 60 * 1000
-                  );
-                  const attendees = scheduleAttendees
-                    .split(",")
-                    .map((s) => s.trim())
-                    .filter(Boolean);
-                  await createCalendarEvent({
-                    title: modalTitle || "Llamada",
-                    description: modalDescription,
-                    start,
-                    end,
-                    attendees,
-                  });
-                  if (scheduleRoomId) {
-                    await handleLiveKit(scheduleRoomId, user?.email || "");
+                  if (!hasActiveCall) {
+                    const start = new Date(scheduleDateTime);
+                    const end = new Date(
+                      start.getTime() + scheduleDurationMinutes * 60 * 1000
+                    );
+                    const attendees = scheduleAttendees
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    await createCalendarEvent({
+                      title: modalTitle || "Llamada",
+                      description: modalDescription,
+                      start,
+                      end,
+                      attendees,
+                    });
                   }
+                  await handleLiveKit(scheduleRoomId, user?.email || "");
                 } catch (err) {
-                  alert("Error creando invitación o iniciando llamada.");
+                  alert("Error al procesar la llamada. Revisa la consola.");
                 }
               }}
-              disabled={isScheduling}
+              disabled={isScheduling || isJoiningCall}
               className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-dark-600 text-text-primary rounded-lg"
             >
-              {isScheduling ? (
-                "Procesando..."
-              ) : (
-                <>
-                  Crear llamada <FaPhone />
-                </>
-              )}
+              {actionLabel}
             </button>
 
             <button
               onClick={() => {
-                if (scheduledLinks?.icsUrl)
+                if (scheduledLinks?.icsUrl) {
                   try {
                     URL.revokeObjectURL(scheduledLinks.icsUrl);
-                  } catch {}
+                  } catch (err) {
+                    console.error("Error revocando URL:", err);
+                  }
+                }
                 setIsScheduleModalOpen(false);
                 setScheduledLinks(null);
                 setScheduleRoomId(null);
+                setIsJoiningCall(false);
               }}
-              className="px-3 py-1 bg-dark-700 text-text-muted rounded-lg"
+              className="px-3 py-1 bg-dark-900 text-text-muted rounded-lg"
             >
               Cerrar
             </button>
@@ -1234,22 +1539,19 @@ const Board: React.FC = () => {
                   />
                   <button
                     onClick={async () => {
+                      const text = scheduledLinks.shareLink || "";
                       try {
-                        await navigator.clipboard.writeText(
-                          scheduledLinks.shareLink || ""
-                        );
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
+                        await navigator.clipboard.writeText(text);
                       } catch (e) {
                         const el = document.createElement("textarea");
-                        el.value = scheduledLinks.shareLink || "";
+                        el.value = text;
                         document.body.appendChild(el);
                         el.select();
                         document.execCommand("copy");
-                        document.body.removeChild(el);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
+                        el.remove();
                       }
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
                     }}
                     className="px-3 py-1 bg-limeyellow-500 text-white rounded"
                   >
