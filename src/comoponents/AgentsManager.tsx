@@ -248,7 +248,15 @@ const AgentsManager: React.FC = () => {
 
         <div
           className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer"
+          role="button"
+          tabIndex={0}
           onClick={() => setIsFiltersVisible((v) => !v)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              setIsFiltersVisible((v) => !v);
+            }
+          }}
+          aria-pressed={isFiltersVisible}
         >
           <h2 className="text-sm font-semibold text-text-primary">
             Filters{" "}
@@ -275,10 +283,14 @@ const AgentsManager: React.FC = () => {
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex flex-col w-full sm:w-48">
-              <label className="text-xs text-text-secondary font-medium mb-1">
+              <label
+                htmlFor="agents-general-search"
+                className="text-xs text-text-secondary font-medium mb-1"
+              >
                 General Search
               </label>
               <input
+                id="agents-general-search"
                 value={tempSearchTerm}
                 onChange={(e) => setTempSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
@@ -346,6 +358,13 @@ const AgentsManager: React.FC = () => {
                           onClick={() =>
                             setExpandedRow(expandedRow === i ? null : i)
                           }
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              setExpandedRow(expandedRow === i ? null : i);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
                           className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${
                             i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
                           }`}
@@ -393,7 +412,7 @@ const AgentsManager: React.FC = () => {
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>–
+                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>-
                   <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>{" "}
                   of <strong>{totalItems}</strong>
                 </span>

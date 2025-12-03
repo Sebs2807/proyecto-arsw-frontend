@@ -32,7 +32,6 @@ const AgentPicker: React.FC = () => {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [page, setPage] = useState(1);
-  const [, setTotalPages] = useState(1);
 
   const inputRef = useRef<HTMLInputElement | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
@@ -63,8 +62,6 @@ const AgentPicker: React.FC = () => {
         dispatch(setSelectedAgent(agentsData[0]));
         setSearchTerm(agentsData[0].name);
       }
-
-      setTotalPages(response.totalPages || 1);
     } catch (err) {
       console.error("Error fetching agents:", err);
       setAgents([]);
@@ -119,6 +116,15 @@ const AgentPicker: React.FC = () => {
         />
         <ChevronDownIcon
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+          role="button"
+          tabIndex={0}
+          aria-expanded={isDropdownOpen}
+          aria-label="Mostrar opciones de agentes"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              setIsDropdownOpen((open) => !open);
+            }
+          }}
           className={`absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-text-secondary cursor-pointer transition-transform ${
             isDropdownOpen ? "rotate-180" : ""
           }`}

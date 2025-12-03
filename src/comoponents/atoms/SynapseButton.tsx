@@ -22,6 +22,17 @@ const SynapseButton: React.FC<SynapseButtonProps> = ({
   const isSelected = selected === id;
   const hasText = Boolean(text);
 
+  let buttonClass = "";
+  if (disabled) {
+    buttonClass = "opacity-40 cursor-not-allowed bg-dark-600 text-dark-700";
+  } else if (hasText) {
+    buttonClass = "ml-1";
+  } else if (isSelected) {
+    buttonClass = "bg-limeyellow-500 text-text-primary";
+  } else {
+    buttonClass = "bg-dark-600 text-dark-700 hover:bg-limeyellow-400 hover:text-text-primary";
+  }
+
   return (
     <div
       className={`flex ${
@@ -35,20 +46,10 @@ const SynapseButton: React.FC<SynapseButtonProps> = ({
       <button
         onClick={() => !disabled && handleSelect(id, navigationPath)}
         disabled={disabled}
-        className={`flex w-full items-center gap-2 px-2 py-2 rounded-md transition font-medium
-          ${
-            disabled
-              ? "opacity-40 cursor-not-allowed bg-dark-600 text-dark-700"
-              : hasText
-              ? "ml-1"
-              : isSelected
-              ? "bg-limeyellow-500 text-text-primary"
-              : "bg-dark-600 text-dark-700 hover:bg-limeyellow-400 hover:text-text-primary"
-          }
-        `}
+        className={`flex w-full items-center gap-2 px-2 py-2 rounded-md transition font-medium ${buttonClass}`}
       >
         <div
-          className={`${
+          className={`$${
             hasText
               ? "h-7 w-7 flex-shrink-0 flex items-center justify-center"
               : ""

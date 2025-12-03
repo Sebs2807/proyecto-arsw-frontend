@@ -48,8 +48,6 @@ const AgentModal: React.FC<AgentModalProps> = ({
   agent,
   mode,
 }) => {
-  if (!isOpen) return null;
-
   const isEditing = mode === "edit";
   const isDeleting = mode === "delete";
 
@@ -213,18 +211,20 @@ const AgentModal: React.FC<AgentModalProps> = ({
     setSelectedLists((prev) => prev.filter((l) => l.id !== id));
   };
 
+  const modalTitle = isDeleting
+    ? "Delete Agent"
+    : isEditing
+    ? "Edit Agent"
+    : "Create Agent";
+
+  if (!isOpen) return null;
+
   return (
     <div className="fixed inset-0 bg-dark-950/80 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-dark-800 rounded-xl p-6 w-full max-w-2xl shadow-xl border border-dark-600 relative max-h-[90vh] overflow-y-auto scrollbar-hide">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold text-white">
-            {isDeleting
-              ? "Delete Agent"
-              : isEditing
-              ? "Edit Agent"
-              : "Create Agent"}
-          </h2>
+          <h2 className="text-lg font-semibold text-white">{modalTitle}</h2>
           <button
             onClick={onClose}
             className="p-1 rounded-lg hover:bg-dark-700 text-text-secondary transition-colors"
@@ -237,7 +237,7 @@ const AgentModal: React.FC<AgentModalProps> = ({
         {isDeleting ? (
           <>
             <p className="text-text-secondary text-sm">
-              Are you sure you want to delete the agent{" "}
+              Are you sure you want to delete the agent{' '}
               <span className="text-limeyellow-500 font-semibold">
                 {agent?.name}
               </span>
@@ -264,10 +264,11 @@ const AgentModal: React.FC<AgentModalProps> = ({
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name */}
             <div>
-              <label className="block text-sm text-text-secondary mb-1 font-medium">
+              <label htmlFor="agent-name" className="block text-sm text-text-secondary mb-1 font-medium">
                 Agent Name *
               </label>
               <input
+                id="agent-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Lead Classifier"
@@ -278,17 +279,18 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
             {/* Temperature */}
             <div>
-              <label className="block text-sm text-text-secondary mb-1 font-medium">
+              <label htmlFor="agent-temperature" className="block text-sm text-text-secondary mb-1 font-medium">
                 Temperature (0.0 - 2.0)
               </label>
               <input
+                id="agent-temperature"
                 type="number"
                 step="0.1"
                 min="0"
                 max="2"
                 value={temperature}
                 onChange={(e) =>
-                  setTemperature(parseFloat(e.target.value) || 0)
+                  setTemperature(Number.parseFloat(e.target.value) || 0)
                 }
                 className="w-full bg-dark-600 text-white rounded-lg px-3 py-2 text-sm border border-dark-600 focus:border-limeyellow-500 focus:outline-none transition-colors"
               />
@@ -299,10 +301,11 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
             {/* Max Tokens */}
             <div>
-              <label className="block text-sm text-text-secondary mb-1 font-medium">
+              <label htmlFor="agent-max-tokens" className="block text-sm text-text-secondary mb-1 font-medium">
                 Max Tokens
               </label>
               <input
+                id="agent-max-tokens"
                 type="number"
                 min="1"
                 value={maxTokens}
@@ -316,10 +319,11 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
             {/* Flow Config */}
             <div>
-              <label className="block text-sm text-text-secondary mb-1 font-medium">
+              <label htmlFor="agent-flow-config" className="block text-sm text-text-secondary mb-1 font-medium">
                 Flow Config (JSON)
               </label>
               <textarea
+                id="agent-flow-config"
                 rows={6}
                 value={flowConfig}
                 onChange={(e) => setFlowConfig(e.target.value)}
@@ -333,10 +337,11 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
             {/* Board search */}
             <div className="relative">
-              <label className="block text-sm text-text-secondary mb-1 font-medium">
+              <label htmlFor="board-search" className="block text-sm text-text-secondary mb-1 font-medium">
                 Assign Boards
               </label>
               <input
+                id="board-search"
                 type="text"
                 value={searchBoards}
                 onChange={(e) => {
@@ -352,11 +357,21 @@ const AgentModal: React.FC<AgentModalProps> = ({
               />
 
               {showBoardSuggestions && boardSuggestions.length > 0 && (
-                <div className="absolute mt-2 w-full bg-dark-600 border border-dark-500 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10">
+                <div
+                  className="absolute mt-2 w-full bg-dark-600 border border-dark-500 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10"
+                  role="listbox"
+                  tabIndex={0}
+                  aria-label="Board suggestions"
+                >
                   {boardSuggestions.map((b) => (
                     <div
                       key={b.id}
+                      role="option"
+                      tabIndex={0}
                       onClick={() => handleSelectBoard(b)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') handleSelectBoard(b);
+                      }}
                       className="px-3 py-2 text-sm text-white hover:bg-dark-700 cursor-pointer transition-colors"
                     >
                       {b.title}
@@ -395,10 +410,11 @@ const AgentModal: React.FC<AgentModalProps> = ({
             )}
 
             <div className="relative">
-              <label className="block text-sm text-text-secondary mb-1 font-medium">
+              <label htmlFor="list-search" className="block text-sm text-text-secondary mb-1 font-medium">
                 Assign Lists
               </label>
               <input
+                id="list-search"
                 type="text"
                 value={searchLists}
                 onChange={(e) => {
@@ -414,11 +430,21 @@ const AgentModal: React.FC<AgentModalProps> = ({
               />
 
               {showListSuggestions && listSuggestions.length > 0 && (
-                <div className="absolute mt-2 w-full bg-dark-600 border border-dark-500 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10">
+                <div
+                  className="absolute mt-2 w-full bg-dark-600 border border-dark-500 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10"
+                  role="listbox"
+                  tabIndex={0}
+                  aria-label="List suggestions"
+                >
                   {listSuggestions.map((l) => (
                     <div
                       key={l.id}
+                      role="option"
+                      tabIndex={0}
                       onClick={() => handleSelectList(l)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') handleSelectList(l);
+                      }}
                       className="px-3 py-2 text-sm text-white hover:bg-dark-700 cursor-pointer transition-colors"
                     >
                       {l.title}
