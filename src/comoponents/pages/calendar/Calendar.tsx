@@ -94,6 +94,15 @@ const WeeklyCalendar: React.FC = () => {
   };
 
   const getWeekKey = (d: Date) => startOfWeek(d, { weekStartsOn: 0 }).toISOString();
+  
+ const invalidateWeekCache = (d: Date) => {
+   try {
+     const key = getWeekKey(d);
+     if (cacheRef.current[key]) delete cacheRef.current[key];
+   } catch (e) {
+     console.warn('Failed to invalidate week cache', e);
+   }
+ };
 
   const prefetchWeek = async (weekStartDate: Date) => {
     const key = getWeekKey(weekStartDate);
@@ -128,13 +137,20 @@ const WeeklyCalendar: React.FC = () => {
     setActionLoading(true);
     try {
       console.log("Deleting event id:", selectedEvent.id);
+      const deletedId = selectedEvent.id;
       // Use apiService (axios) so baseURL and withCredentials are respected
-      const result = await apiService.delete(`/v1/calendar/google-events/${selectedEvent.id}`);
+      const result = await apiService.delete(`/v1/calendar/google-events/${deletedId}`);
       console.log("Delete result:", result);
 
       // Resultado esperado del backend: { ok: true } o similar
       setModalOpen(false);
       setSelectedEvent(null);
+
+      // Update local state immediately so UI reflects deletion without waiting
+      setEvents((prev) => prev.filter((e) => e.id !== deletedId));
+
+      // Invalidate cache for the current week so loadWeek will refetch
+      invalidateWeekCache(currentWeek);
       await loadWeek(currentWeek);
       try {
         window.dispatchEvent(new CustomEvent('calendar:updated'));
@@ -177,9 +193,20 @@ const WeeklyCalendar: React.FC = () => {
       // to reschedule. If you need to update title/description, the
       // backend must accept those fields (or provide a separate endpoint).
       await apiService.patch(`/v1/calendar/google-events/${selectedEvent.id}`, payload);
+      // Optimistically update local event so UI updates immediately
+      const updatedId = selectedEvent.id;
+      setEvents((prev) =>
+        prev.map((ev) =>
+          ev.id === updatedId
+            ? { ...ev, start: new Date(isoStart), end: new Date(isoEnd), title: newTitle || ev.title }
+            : ev
+        )
+      );
 
       setModalOpen(false);
       setSelectedEvent(null);
+      // Invalidate cache for the current week so loadWeek will refetch updated data
+      invalidateWeekCache(currentWeek);
       await loadWeek(currentWeek);
       try {
         window.dispatchEvent(new CustomEvent('calendar:updated'));
@@ -215,6 +242,20 @@ const WeeklyCalendar: React.FC = () => {
 
   React.useEffect(() => {
     loadWeek(currentWeek);
+  }, [currentWeek]);
+
+  // Listen for global calendar updates (created/edited/deleted elsewhere)
+  React.useEffect(() => {
+    const onCalendarUpdated = () => {
+      try {
+        loadWeek(currentWeek);
+      } catch (e) {
+        console.warn('calendar:updated handler failed', e);
+      }
+    };
+
+    window.addEventListener('calendar:updated', onCalendarUpdated as EventListener);
+    return () => window.removeEventListener('calendar:updated', onCalendarUpdated as EventListener);
   }, [currentWeek]);
 
   const goToPreviousWeek = () => setCurrentWeek((prev) => addDays(prev, -7));
