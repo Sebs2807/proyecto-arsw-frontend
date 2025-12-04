@@ -32,6 +32,13 @@ const NotificationsFloat: React.FC = () => {
     return () => clearInterval(id);
   }, [fetchPending]);
 
+  // Listen for global updates (other parts of the app can dispatch 'calendar:updated')
+  React.useEffect(() => {
+    const onUpdate = () => fetchPending();
+    window.addEventListener("calendar:updated", onUpdate as EventListener);
+    return () => window.removeEventListener("calendar:updated", onUpdate as EventListener);
+  }, [fetchPending]);
+
   // Close on outside click
   const rootRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
