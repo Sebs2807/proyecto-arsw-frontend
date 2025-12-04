@@ -18,7 +18,13 @@ export const InputWithIcon: React.FC<InputWithIconProps> = ({
 }) => {
   const [showPassword, setShowPassword] = useState(false);
 
-  const inputType = isPassword ? (showPassword ? "text" : "password") : type;
+  let inputType: string | undefined;
+
+  if (isPassword) {
+    inputType = showPassword ? "text" : "password";
+  } else {
+    inputType = type;
+  }
 
   return (
     <div className="flex flex-col gap-1 w-full">

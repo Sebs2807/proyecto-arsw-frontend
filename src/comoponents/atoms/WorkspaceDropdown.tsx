@@ -51,28 +51,28 @@ const WorkspaceDropdown: React.FC<Props> = ({
       {open && (
         <div className="absolute mt-1 w-56 bg-dark-700 rounded shadow-lg z-10">
           {workspaces.map((ws) => (
-            <div
+            <button
               key={ws.id}
               onClick={() => handleSelect(ws)}
-              className="px-3 py-2 hover:bg-dark-500 cursor-pointer"
+              className="w-full text-left px-3 py-2 hover:bg-dark-500 cursor-pointer bg-transparent text-text-primary"
             >
               {ws.name}
-            </div>
+            </button>
           ))}
 
           {/* Separador */}
           <div className="border-t border-dark-500 my-1"></div>
 
           {/* Crear nuevo workspace */}
-          <div
+          <button
             onClick={() => {
               setOpen(false);
               onCreate?.();
             }}
-            className="px-3 py-2 hover:bg-dark-500 cursor-pointer text-limeyellow-500 font-semibold flex items-center"
+            className="w-full text-left px-3 py-2 hover:bg-dark-500 text-limeyellow-500 font-semibold flex items-center bg-transparent"
           >
             <span className="mr-2">+</span> Crear nuevo workspace
-          </div>
+          </button>
         </div>
       )}
     </div>

@@ -69,6 +69,18 @@ const BoardsManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const renderMembers = (members: UserDto[]) => {
+    return members.map((m) => (
+      <span
+        key={m.id}
+        className="inline-block bg-dark-600 text-text-primary text-xs px-2 py-1 mr-1 rounded"
+      >
+        {m.firstName} {m.lastName}
+      </span>
+    ));
+  };
+
+
   const fetchData = useCallback(async () => {
     if (!activeWorkspaceId) return;
     const abortController = new AbortController();
@@ -124,15 +136,18 @@ const BoardsManager: React.FC = () => {
             {!areFiltersUnchanged ? <span className="ml-2 text-limeyellow-500 text-xs font-bold">(Pending Apply)</span>
             : isAnyFilterActive ? <span className="ml-2 text-text-secondary text-xs font-normal">(Active)</span> : null}
           </h2>
-          <button className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
             {isFiltersVisible ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
-          </button>
-        </div>
+          </span>
+          </div>
 
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex flex-col w-full sm:w-48">
-              <label className="text-xs text-text-secondary font-medium mb-1">General Search</label>
+              <label
+                htmlFor="general-search"
+                className="text-xs text-text-secondary font-medium mb-1"
+              >General Search</label>
               <input
                 value={tempSearchTerm}
                 onChange={e => setTempSearchTerm(e.target.value)}

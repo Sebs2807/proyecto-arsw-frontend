@@ -33,7 +33,7 @@ interface List {
 const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  if (typeof window === "undefined") return null;
+  if (globalThis.window === undefined) return null;
   const portal = document.getElementById("drag-portal");
   return ReactDOM.createPortal(children, portal ?? document.body);
 };
@@ -66,12 +66,14 @@ const Board: React.FC = () => {
   >({});
 
   useEffect(() => {
-    Object.entries(draggingCards).forEach(async ([cardId, info]) => {
-      if (!draggingNames[cardId]) {
-        const name = await getUserName(info.user);
-        setDraggingNames(prev => ({ ...prev, [cardId]: name }));
+    (async () => {
+      for (const [cardId, info] of Object.entries(draggingCards)) {
+        if (!draggingNames[cardId]) {
+          const name = await getUserName(info.user);
+          setDraggingNames(prev => ({ ...prev, [cardId]: name }));
+        }
       }
-    });
+    })();
   }, [draggingCards]);
 
   useEffect(() => {
@@ -105,64 +107,122 @@ const Board: React.FC = () => {
 
     const boardId = selectedBoard.id;
 
-    apiService.initSocket(
-      (newList) =>
-        setLists((prev) =>
-          prev.some((l) => l.id === newList.id)
-            ? prev
-            : [...prev, { ...newList, cards: [] }]
-        ),
-      (updatedList) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === updatedList.id ? { ...l, ...updatedList } : l
-          )
-        ),
-      (id) => setLists((prev) => prev.filter((l) => l.id !== id)),
-      (listId, card) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? {
-                ...l,
-                cards: l.cards.some((c) => c.id === card.id)
-                  ? l.cards
-                  : [...l.cards, card],
-              }
-              : l
-          )
-        ),
-      (listId, card) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? {
-                ...l,
-                cards: l.cards.map((c) =>
-                  c.id === card.id ? { ...c, ...card } : c
-                ),
-              }
-              : l
-          )
-        ),
-      (listId, cardId) =>
-        setLists((prev) =>
-          prev.map((l) =>
-            l.id === listId
-              ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
-              : l
-          )
-        ),
-  (_sourceListId, destListId, card) =>
-        setLists((prev) => {
-          const withoutCard = prev.map((l) => ({ ...l, cards: l.cards.filter((c) => c.id !== card.id) }));
+  const listHasId = (id: string) => (list: List) => list.id === id;
 
-          return withoutCard.map((l) =>
-            l.id === destListId ? { ...l, cards: [...l.cards, card] } : l
-          );
-        }),
-      boardId
+  const handleNewList = (newList: List) => {
+    setLists((prev) => {
+      const exists = prev.some(listHasId(newList.id));
+      if (exists) return prev;
+      return [...prev, { ...newList, cards: [] }];
+    });
+  };
+
+  const updateListItem = (updated: List) => (l: List) =>
+  l.id === updated.id ? { ...l, ...updated } : l;
+
+  const handleUpdatedList = (updatedList: List) => {
+    setLists((prev) => prev.map(updateListItem(updatedList)));
+  };
+
+  const isNotId = (id: string) => (l: List) => l.id !== id;
+
+  const handleDeletedList = (id: string) => {
+    setLists((prev) => prev.filter(isNotId(id)));
+  };
+
+  const cardExists = (cardId: string) => (c: Task) => c.id === cardId;
+
+  const addCardToList = (listId: string, card: Task) => (l: List) => {
+    if (l.id !== listId) return l;
+    if (l.cards.some(cardExists(card.id))) return l;
+
+    return { ...l, cards: [...l.cards, card] };
+  };
+
+  const updateCard = (updatedCard: Task) => (c: Task) =>
+    c.id === updatedCard.id ? { ...c, ...updatedCard } : c;
+
+  const updateListCards = (listId: string, card: Task) => (l: List) =>
+    l.id === listId
+      ? { ...l, cards: l.cards.map(updateCard(card)) }
+      : l;
+
+  const handleCardCreated = (listId: string, card: Task) => {
+    setLists((prev) => prev.map(addCardToList(listId, card)));
+  };
+
+  const handleCardUpdated = (listId: string, card: Task) => {
+    setLists((prev) => prev.map(updateListCards(listId, card)));
+  };
+
+  const handleCardDeleted = (listId: string, cardId: string) => {
+    const isTargetList = (l: List) => l.id === listId;
+
+    const isNotCard = (c: Task) => c.id !== cardId;
+
+    const removeCardFrom = (l: List): List => {
+      const newCards = l.cards.filter(isNotCard);
+      return { ...l, cards: newCards };
+    };
+
+    const transformList = (l: List) => {
+      if (!isTargetList(l)) return l;
+      return removeCardFrom(l);
+    };
+
+    setLists(prev => prev.map(transformList));
+  };
+
+  const moveCard = (lists: List[], destListId: string, card: Task): List[] => {
+    const withoutCard = removeCard(lists, card.id);
+    return addCard(withoutCard, destListId, card);
+  };
+
+  const removeCard = (lists: List[], cardId: string): List[] => {
+    return lists.map((list) => updateListWithoutCard(list, cardId));
+  };
+
+  const updateListWithoutCard = (list: List, cardId: string): List => {
+    return {
+      ...list,
+      cards: filterCard(list.cards, cardId),
+    };
+  };
+
+  const filterCard = (cards: Task[], cardId: string): Task[] => {
+    return cards.filter((c) => isNotCard(c, cardId));
+  };
+
+  const isNotCard = (card: Task, cardId: string): boolean => {
+    return card.id !== cardId;
+  };
+
+  const addCard = (lists: List[], destListId: string, card: Task): List[] => {
+    return lists.map((list) =>
+      list.id === destListId
+        ? { ...list, cards: [...list.cards, card] }
+        : list
     );
+  };
+
+  const handleCardMovedExternally = (
+    _sourceListId: string,
+    destListId: string,
+    card: Task
+  ) => {
+    setLists((prevLists) => moveCard(prevLists, destListId, card));
+  };
+
+  apiService.initSocket(boardId, {
+    onListCreated: handleNewList,
+    onListUpdated: handleUpdatedList,
+    onListDeleted: handleDeletedList,
+    onCardCreated: handleCardCreated,
+    onCardUpdated: handleCardUpdated,
+    onCardDeleted: handleCardDeleted,
+    onCardMoved: handleCardMovedExternally,
+  });
+
 
     const requestActiveCalls = () => {
       apiService.socket?.emit("call:requestState", { boardId });
@@ -178,23 +238,23 @@ const Board: React.FC = () => {
       if (payloadBoardId !== boardId) return;
 
       const mapped: Record<string, { roomId: string; startedBy?: string }> = {};
-      calls.forEach((call) => {
+      for (const call of calls) {
         if (call.cardId && call.roomId) {
           mapped[call.cardId] = {
             roomId: call.roomId,
             startedBy: call.startedBy,
           };
         }
-      });
+      }
 
       const activeRoomForThisClient =
-        typeof window !== "undefined"
-          ? window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY)
-          : null;
+        globalThis.window === undefined
+          ? null
+          : globalThis.window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY);
 
       const cleaned = { ...mapped };
 
-      Object.entries(mapped).forEach(([cardId, info]) => {
+      for (const [cardId, info] of Object.entries(mapped)) {
         const sameUser = info.startedBy && info.startedBy === (user?.email ?? "");
         const clientCurrentlyInRoom = activeRoomForThisClient && activeRoomForThisClient === cardId;
 
@@ -206,7 +266,7 @@ const Board: React.FC = () => {
           });
           delete cleaned[cardId];
         }
-      });
+      }
 
       setActiveCalls(cleaned);
     };
@@ -227,115 +287,193 @@ const Board: React.FC = () => {
       setActiveCalls((prev) => ({ ...prev, [cardId]: { roomId, startedBy: user } }));
     });
 
-    apiService.socket?.on("call:ended", ({ boardId: payloadBoardId, cardId, user: endedBy }: { boardId?: string; cardId?: string; user?: string }) => {
-      if (payloadBoardId && payloadBoardId !== boardId) return;
-      if (!cardId) return;
-      setActiveCalls((prev) => {
-        const copy = { ...prev };
-        delete copy[cardId];
-        return copy;
-      });
+  function shouldIgnoreEvent(payloadBoardId?: string, boardId?: string) {
+    return payloadBoardId !== undefined && payloadBoardId !== boardId;
+  }
 
-      if (typeof window !== "undefined") {
-        const activeRoomId = window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY);
-        if (activeRoomId && activeRoomId === cardId) {
-          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
-          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
-          if (window.location.pathname.startsWith("/livekit")) {
-            window.location.href = "https://localhost:5173/boards";
-          } else {
-            navigate("/boards");
-          }
-          return;
-        }
-
-        if (endedBy && endedBy === (user?.email ?? "")) {
-          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
-          window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
-          if (window.location.pathname.startsWith("/livekit")) {
-            window.location.href = "https://localhost:5173/boards";
-          } else {
-            navigate("/boards");
-          }
-        }
-      }
+  function removeActiveCall(cardId: string) {
+    setActiveCalls((prev) => {
+      const copy = { ...prev };
+      delete copy[cardId];
+      return copy;
     });
+  }
+
+  function redirectToBoards() {
+    const path = globalThis.window?.location?.pathname;
+    const base = import.meta.env.VITE_FRONTEND_URL;
+
+    if (path?.startsWith("/livekit")) {
+      globalThis.window.location.href = `${base}/boards`;
+    } else {
+      navigate("/boards");
+    }
+  }
+
+  function clearSession() {
+    globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+    globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+  }
+
+  function handleRoomCleanup(cardId: string, endedBy: string) {
+    if (!globalThis.window) return;
+
+    const activeRoomId = globalThis.window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY);
+
+    const isSameActiveRoom = activeRoomId === cardId;
+    const endedByMe = endedBy === cardId; 
+
+    if (isSameActiveRoom || endedByMe) {
+      clearSession();
+      redirectToBoards();
+    }
+  }
+
+    apiService.socket?.on(
+      "call:ended",
+      ({ boardId: payloadBoardId, cardId, user: endedBy }: { boardId?: string; cardId?: string; user?: string }) => {
+        if (!cardId) return; 
+        if (shouldIgnoreEvent(payloadBoardId, boardId)) return;
+
+        removeActiveCall(cardId);
+        handleRoomCleanup(cardId, endedBy ?? ""); 
+      }
+    );
+
+  function updateDraggingCards(data: any) {
+    setDraggingCards((prev) => ({
+      ...prev,
+      [data.cardId]: {
+        user: data.user,
+        destListId: data.destListId,
+        destIndex: data.destIndex,
+      },
+    }));
+  }
+
+  function updateListsOnDrag(data: any) {
+    setLists((prevLists) => applyDrag(prevLists, data));
+  }
+
+  function applyDrag(lists: List[], data: any): List[] {
+    const card = findCard(lists, data.cardId);
+    if (!card) return lists;
+
+    const moved = moveCard(lists, data.destListId, card);
+
+    return reorderCardInList(moved, data.destListId, card.id, data.destIndex);
+  }
+
+  function findCard(lists: List[], cardId: string): Task | undefined {
+    for (const list of lists) {
+      const found = list.cards.find((c) => c.id === cardId);
+      if (found) return found;
+    }
+    return undefined;
+  }
+
+  function reorderCardInList(
+    lists: List[],
+    destListId: string,
+    cardId: string,
+    destIndex: number
+  ): List[] {
+    const newLists = [...lists];
+    const listIndex = newLists.findIndex((l) => l.id === destListId);
+    if (listIndex === -1) return lists;
+
+    const list = { ...newLists[listIndex] };
+
+    const card = list.cards.find((c) => c.id === cardId);
+    if (!card) return lists;
+
+    list.cards = list.cards.filter((c) => c.id !== cardId);
+    list.cards.splice(destIndex, 0, card);
+
+    newLists[listIndex] = list;
+    return newLists;
+  }
 
     apiService.socket?.on("card:dragUpdate", (data) => {
-      setDraggingCards((prev) => ({
-        ...prev,
-        [data.cardId]: {
-          user: data.user,
-          destListId: data.destListId,
-          destIndex: data.destIndex,
-        },
-      }));
-
-      setLists((prevLists) => {
-        const sourceListIndex = prevLists.findIndex((list) =>
-          list.cards.some((card) => card.id === data.cardId)
-        );
-        if (sourceListIndex === -1) return prevLists;
-
-        const destListIndex = prevLists.findIndex(
-          (list) => list.id === data.destListId
-        );
-        if (destListIndex === -1) return prevLists;
-
-        const newLists = [...prevLists];
-        const sourceList = { ...newLists[sourceListIndex] };
-        const destList = { ...newLists[destListIndex] };
-
-        const card = sourceList.cards.find((c) => c.id === data.cardId);
-        if (!card) return prevLists;
-
-        sourceList.cards = sourceList.cards.filter((c) => c.id !== card.id);
-        destList.cards = destList.cards.filter((c) => c.id !== card.id);
-
-        destList.cards.splice(data.destIndex, 0, card);
-
-        newLists[sourceListIndex] = sourceList;
-        newLists[destListIndex] = destList;
-
-        return newLists;
-      });
+      updateDraggingCards(data);
+      updateListsOnDrag(data);
     });
 
+  function clearDraggingCard(cardId: string) {
+    setDraggingCards((prev) => {
+      const copy = { ...prev };
+      delete copy[cardId];
+      return copy;
+    });
+  }
+
+  function applyDragEnd(
+    lists: List[],
+    cardId: string,
+    destListId: string,
+    destIndex: number
+  ): List[] {
+    const sourceIndex = findSourceList(lists, cardId);
+    const destIndexList = findDestList(lists, destListId);
+
+    if (sourceIndex === -1 || destIndexList === -1) return lists;
+
+    const card = findCardInList(lists[sourceIndex], cardId);
+    if (!card) return lists;
+
+    return moveCardBetweenLists(lists, sourceIndex, destIndexList, card, cardId, destIndex);
+  }
+
+  function cardMatchesId(cardId: string) {
+    return (c: Task) => c.id === cardId;
+  }
+
+  function listContainsCard(cardId: string) {
+    return (l: List) => l.cards.some(cardMatchesId(cardId));
+  }
+
+  function findSourceList(lists: List[], cardId: string): number {
+    return lists.findIndex(listContainsCard(cardId));
+  }
+
+  function findDestList(lists: List[], destListId: string): number {
+    return lists.findIndex((l) => l.id === destListId);
+  }
+
+  function findCardInList(list: List, cardId: string): Task | undefined {
+    return list.cards.find((c) => c.id === cardId);
+  }
+
+  function moveCardBetweenLists(
+    lists: List[],
+    sourceIndex: number,
+    destIndexList: number,
+    card: Task,
+    cardId: string,
+    destIndex: number
+  ): List[] {
+    const newLists = [...lists];
+    const sourceList = { ...newLists[sourceIndex] };
+    const destList = { ...newLists[destIndexList] };
+
+    sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
+    destList.cards = destList.cards.filter((c) => c.id !== cardId);
+    destList.cards.splice(destIndex, 0, card);
+
+    newLists[sourceIndex] = sourceList;
+    newLists[destIndexList] = destList;
+
+    return newLists;
+  }
 
     apiService.socket?.on("card:dragEnd", ({ cardId, destListId, destIndex }) => {
-      setDraggingCards((prev) => {
-        const copy = { ...prev };
-        delete copy[cardId];
-        return copy;
-      });
+      clearDraggingCard(cardId);
 
-      if (destListId && destIndex !== undefined) {
-        setLists((prevLists) => {
-          const allLists = [...prevLists];
-          const sourceListIndex = allLists.findIndex((l) =>
-            l.cards.some((c) => c.id === cardId)
-          );
-          const destListIndex = allLists.findIndex(
-            (l) => l.id === destListId
-          );
-          if (sourceListIndex === -1 || destListIndex === -1) return prevLists;
+      if (!destListId || destIndex === undefined) return;
 
-          const newLists = [...allLists];
-          const sourceList = { ...newLists[sourceListIndex] };
-          const destList = { ...newLists[destListIndex] };
-
-          const card = sourceList.cards.find((c) => c.id === cardId);
-          if (!card) return prevLists;
-
-          sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
-          destList.cards = destList.cards.filter((c) => c.id !== cardId);
-          destList.cards.splice(destIndex, 0, card);
-
-          newLists[sourceListIndex] = sourceList;
-          newLists[destListIndex] = destList;
-          return newLists;
-        });
-      }
+      setLists((prevLists) =>
+        applyDragEnd(prevLists, cardId, destListId, destIndex)
+      );
     });
 
 
@@ -421,16 +559,18 @@ const Board: React.FC = () => {
       }
 
       const baseIdentity = (user?.email || name || `guest-${Date.now()}`)
-        .replace(/[^a-zA-Z0-9_-]/g, "_");
+        .replaceAll(/[^a-zA-Z0-9_-]/g, "_");
 
-      function getSecureRandomSuffix() {
-        if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-          return crypto.randomUUID().slice(0, 8);
+      function getSecureRandomSuffix(): string {
+        const randomUUID = globalThis.crypto?.randomUUID?.();
+        if (randomUUID) {
+          return randomUUID.slice(0, 8);
         }
 
-        if (typeof window !== "undefined" && window.crypto?.getRandomValues) {
+        const getRandomValues = globalThis.crypto?.getRandomValues?.bind(globalThis.crypto);
+        if (getRandomValues) {
           const arr = new Uint32Array(1);
-          window.crypto.getRandomValues(arr);
+          getRandomValues(arr);
           return arr[0].toString(16).slice(0, 8);
         }
 
@@ -460,12 +600,13 @@ const Board: React.FC = () => {
         });
         setActiveCalls((prev) => ({ ...prev, [roomId]: { roomId, startedBy: user?.email } }));
       } catch (e) {
+          console.error("Error starting call:", e);
       }
 
-      if (typeof window !== "undefined") {
-        window.sessionStorage.setItem(LIVEKIT_ACTIVE_ROOM_KEY, roomId);
+      if (globalThis.window !== undefined) {
+        globalThis.window.sessionStorage.setItem(LIVEKIT_ACTIVE_ROOM_KEY, roomId);
         if (selectedBoard?.id) {
-          window.sessionStorage.setItem(LIVEKIT_ACTIVE_BOARD_KEY, selectedBoard.id);
+          globalThis.window.sessionStorage.setItem(LIVEKIT_ACTIVE_BOARD_KEY, selectedBoard.id);
         }
       }
 
@@ -476,11 +617,11 @@ const Board: React.FC = () => {
         },
       });
 
-    } catch (err) {
+      } catch (err) {
       console.error("Error al generar token de LiveKit:", err);
-      if (typeof window !== "undefined") {
-        window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
-        window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
+      if (globalThis.window !== undefined) {
+        globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_ROOM_KEY);
+        globalThis.window.sessionStorage.removeItem(LIVEKIT_ACTIVE_BOARD_KEY);
       }
       setActiveCalls((prev) => {
         const copy = { ...prev };
@@ -506,14 +647,14 @@ const Board: React.FC = () => {
   const hasActiveCall = currentScheduleCardId ? Boolean(activeCalls[currentScheduleCardId]) : false;
 
   const formatForGoogleDates = (d: Date) => {
-    return d.toISOString().replace(/-|:|\.\d{3}/g, "");
+    return d.toISOString().replaceAll(/-|:|\.\d{3}/g, "");
   };
 
   const generateICS = (opts: { uid: string; title: string; description?: string; start: Date; end: Date; url?: string; attendees?: string[] }) => {
     const { uid, title, description = "", start, end, url = "", attendees = [] } = opts;
-    const dtstamp = new Date().toISOString().replace(/-|:|\.\d{3}/g, "");
-    const dtstart = start.toISOString().replace(/-|:|\.\d{3}/g, "");
-    const dtend = end.toISOString().replace(/-|:|\.\d{3}/g, "");
+    const dtstamp = new Date().toISOString().replaceAll(/-|:|\.\d{3}/g, "");
+    const dtstart = start.toISOString().replaceAll(/-|:|\.\d{3}/g, "");
+    const dtend = end.toISOString().replaceAll(/-|:|\.\d{3}/g, "");
     const attendeesLines = attendees.map(a => `ATTENDEE:mailto:${a}`).join("\r\n");
     const ics = [`BEGIN:VCALENDAR`,`VERSION:2.0`,`PRODID:-//Synapse//EN`,`CALSCALE:GREGORIAN`,`BEGIN:VEVENT`,
       `UID:${uid}`,
@@ -550,7 +691,9 @@ const Board: React.FC = () => {
       addUrl.searchParams.set('text', opts.title);
       if (opts.description) addUrl.searchParams.set('details', opts.description);
       addUrl.searchParams.set('dates', googleDates);
-      if (opts.attendees && opts.attendees.length) addUrl.searchParams.set('add', opts.attendees.join(','));
+      if (opts.attendees?.length) {
+        addUrl.searchParams.set('add', opts.attendees.join(','));
+      }
 
       const uid = created?.id || `synapse-${Date.now()}`;
       const ics = generateICS({ uid, title: opts.title, description: opts.description, start: opts.start, end: opts.end, url: htmlLink, attendees: opts.attendees });
@@ -593,7 +736,7 @@ const Board: React.FC = () => {
   
 
   const handleDeleteList = async (listId: string) => {
-    if (!window.confirm("¿Seguro que deseas eliminar esta lista?")) return;
+    if (!globalThis.window?.confirm("¿Seguro que deseas eliminar esta lista?")) return;
     try {
       await apiService.delete(`/v1/lists/${listId}`);
     } catch {
@@ -638,7 +781,191 @@ const Board: React.FC = () => {
     }
   };
 
-  
+  const handleEditListTitle = async (list: List) => {
+    const title = globalThis?.window?.prompt("Nuevo título de la lista:", list.title);
+    const newTitle = title?.trim();
+    if (!newTitle) return;
+
+    try {
+      await apiService.put<List>(`/v1/lists/${list.id}`, { title: newTitle });
+      updateListTitle(list.id, newTitle);
+    } catch {
+      alert("No se pudo actualizar la lista");
+    }
+  };
+
+  const updateListTitle = (listId: string, newTitle: string) => {
+    setLists(prev =>
+      prev.map(l =>
+        l.id === listId ? { ...l, title: newTitle } : l
+      )
+    );
+  };
+
+const renderDraggableCard = ({
+  task,
+  user,
+  provided,
+  snapshot,
+  draggingCards,
+  draggingNames,
+  activeCalls,
+  setEditingTask,
+  setModalTitle,
+  setModalDescription,
+}: any) => {
+  const isBeingDraggedByAnother =
+    draggingCards[task.id] &&
+    draggingCards[task.id].user !== user?.email;
+
+  const handleClick = () => {
+    if (!isBeingDraggedByAnother) {
+      setEditingTask(task);
+      setModalTitle(task.title ?? "");
+      setModalDescription(task.description ?? "");
+    }
+  };
+
+  const card = (
+    <button
+      ref={provided.innerRef}
+      {...provided.draggableProps}
+      {...provided.dragHandleProps}
+      type="button"
+      onClick={handleClick}
+      className={`relative text-left w-full p-3 rounded-lg border text-sm transition-all duration-300
+        ${snapshot.isDragging
+          ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
+          : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"}
+        ${isBeingDraggedByAnother ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      {isBeingDraggedByAnother && (
+        <span className="absolute top-1 left-1 text-xs bg-limeyellow-600 text-text-primary px-2 py-0.5 rounded-md shadow-md">
+          {draggingNames[task.id] || "Cargando..."}
+        </span>
+      )}
+
+      {activeCalls[task.id] && (
+        <span className="absolute top-1 right-1 text-[10px]">
+          <BsFillTelephoneForwardFill size={16} color="green" />
+        </span>
+      )}
+
+      <h3 className="font-medium truncate text-text-primary">
+        {task.title}
+      </h3>
+
+      <p className="text-xs mt-1 line-clamp-2 text-text-muted">
+        {task.description}
+      </p>
+    </button>
+  );
+
+  return snapshot.isDragging ? (
+    <DragOverlayPortal>
+      <div className="pointer-events-none">{card}</div>
+    </DragOverlayPortal>
+  ) : (
+    card
+  );
+};
+
+const draggableRenderer =
+  ({
+    task,
+    user,
+    draggingCards,
+    draggingNames,
+    activeCalls,
+    setEditingTask,
+    setModalTitle,
+    setModalDescription,
+  }: any) =>
+  (provided: any, snapshot: any) =>
+    renderDraggableCard({
+      task,
+      user,
+      provided,
+      snapshot,
+      draggingCards,
+      draggingNames,
+      activeCalls,
+      setEditingTask,
+      setModalTitle,
+      setModalDescription,
+    });
+
+
+const handleDeleteTask = async () => {
+  if (!editingTask) return;
+
+  const wantDelete = globalThis.window?.confirm("¿Seguro que deseas eliminar esta tarea?");
+  if (!wantDelete) return;
+
+  try {
+    await apiService.delete(`/v1/cards/${editingTask.id}`);
+
+    setLists((prev) => removeTaskFromLists(prev, editingTask.id));
+
+    setEditingTask(null);
+  } catch (err) {
+    console.error("Error eliminando tarea:", err);
+    alert("Error al eliminar la tarea");
+    throw err; 
+  }
+};
+
+const removeTaskFromLists = (lists: List[], taskId: string) => {
+  return lists.map((l) => ({
+    ...l,
+    cards: l.cards.filter((c) => c.id !== taskId),
+  }));
+};
+
+const updateCardInList = (
+  list: List,
+  cardId: string,
+  updatedCard: Partial<Task>,
+  modalTitle: string,
+  modalDescription: string
+): List => ({
+  ...list,
+  cards: list.cards.map((c) =>
+    c.id === cardId
+      ? {
+          ...c,
+          title: updatedCard.title ?? modalTitle,
+          description: updatedCard.description ?? modalDescription,
+        }
+      : c
+  ),
+});
+
+const applyCardUpdate = (
+  setLists: React.Dispatch<React.SetStateAction<List[]>>,
+  cardId: string,
+  updatedCard: Partial<Task>,
+  modalTitle: string,
+  modalDescription: string
+): void => {
+  setLists((prev) =>
+    prev.map((l) =>
+      updateCardInList(l, cardId, updatedCard, modalTitle, modalDescription)
+    )
+  );
+};
+
+const actionLabel = (() => {
+  if (isScheduling || isJoiningCall) {
+    return "Procesando...";
+  }
+
+  if (hasActiveCall) {
+    return <>Unirse a llamada <FaPhone /></>;
+  }
+
+  return <>Crear llamada <FaPhone /></>;
+})();
 
   if (error) return <p className="text-center text-text-error">{error}</p>;
   if (!selectedBoard)
@@ -674,12 +1001,12 @@ const Board: React.FC = () => {
             });
           };
 
-          window.addEventListener("mousemove", handleMouseMove);
+          globalThis.window?.addEventListener("mousemove", handleMouseMove);
 
-          window.addEventListener(
+          globalThis.window?.addEventListener(
             "mouseup",
             () => {
-              window.removeEventListener("mousemove", handleMouseMove);
+              globalThis.window?.removeEventListener("mousemove", handleMouseMove);
             },
             { once: true }
           );
@@ -713,18 +1040,7 @@ const Board: React.FC = () => {
                         {list.title} ({list.cards.length})
                       </h2>
                       <div className="flex gap-2">
-                        <button
-                          onClick={async () => {
-                            const title = window.prompt("Nuevo título de la lista:", list.title);
-                            if (!title || !title.trim()) return;
-                            try {
-                              await apiService.put<List>(`/v1/lists/${list.id}`, { title: title.trim() });
-                              setLists((prev) => prev.map(l => l.id === list.id ? { ...l, title: title.trim() } : l));
-                            } catch {
-                              alert("No se pudo actualizar la lista");
-                            }
-                          }}
-                        >
+                        <button onClick={() => handleEditListTitle(list)}>
                           <Pencil size={16} />
                         </button>
                         <button onClick={() => handleDeleteList(list.id)}>
@@ -735,57 +1051,25 @@ const Board: React.FC = () => {
 
                     <div className="flex flex-col gap-3 overflow-y-auto flex-1 pr-1">
                       {list.cards.map((task, index) => (
-                        <Draggable key={task.id} draggableId={task.id} index={index} isDragDisabled={draggingCards[task.id] && draggingCards[task.id].user !== user?.email}>
-                          {(provided, snapshot) => {
-                            const isBeingDraggedByAnother = draggingCards[task.id] && draggingCards[task.id].user !== user?.email;
-
-                            const card = (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={`relative p-3 rounded-lg border text-sm transition-all duration-300 
-                                    ${snapshot.isDragging
-                                    ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
-                                    : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"}
-                                    ${isBeingDraggedByAnother ? "opacity-50 cursor-not-allowed" : ""}`}
-                                onClick={() => {
-                                    if (!isBeingDraggedByAnother) {
-                                      setEditingTask(task);
-                                      setModalTitle(task.title ?? "");
-                                      setModalDescription(task.description ?? "");
-                                    }
-                                  }}
-                              >
-                                {isBeingDraggedByAnother && (
-                                  <span className="absolute top-1 left-1 text-xs bg-limeyellow-600 text-text-primary px-2 py-0.5 rounded-md shadow-md">
-                                    {draggingNames[task.id] || "Cargando..."}{""}
-                                  </span>
-                                )}
-
-                                {activeCalls[task.id] && (
-                                  <span className="absolute top-1 right-1 text-[10px]">
-                                    <BsFillTelephoneForwardFill color="green" size={16}/>
-                                  </span>
-                                )}
-
-                                <h3 className="font-medium truncate text-text-primary">
-                                  {task.title}
-                                </h3>
-                                <p className="text-xs mt-1 line-clamp-2 text-text-muted">
-                                  {task.description}
-                                </p>
-                              </div>
-                            );
-
-                            return snapshot.isDragging ? (
-                              <DragOverlayPortal>
-                                <div className="pointer-events-none">{card}</div>
-                              </DragOverlayPortal>
-                            ) : (
-                              card
-                            );
-                          }}
+                        <Draggable
+                          key={task.id}
+                          draggableId={task.id}
+                          index={index}
+                          isDragDisabled={
+                            draggingCards[task.id] &&
+                            draggingCards[task.id].user !== user?.email
+                          }
+                        >
+                          {draggableRenderer({
+                            task,
+                            user,
+                            draggingCards,
+                            draggingNames,
+                            activeCalls,
+                            setEditingTask,
+                            setModalTitle,
+                            setModalDescription,
+                          })}
                         </Draggable>
                       ))}
 
@@ -911,22 +1195,7 @@ const Board: React.FC = () => {
 
     <div className="flex justify-between items-center mt-3">
       <button
-        onClick={async () => {
-          if (!editingTask) return;
-          if (!window.confirm("¿Seguro que deseas eliminar esta tarea?")) return;
-          try {
-            await apiService.delete(`/v1/cards/${editingTask.id}`);
-            setLists((prev) =>
-              prev.map((l) => ({
-                ...l,
-                cards: l.cards.filter((c) => c.id !== editingTask.id),
-              }))
-            );
-            setEditingTask(null);
-          } catch (err) {
-            alert("Error al eliminar la tarea");
-          }
-        }}
+        onClick={handleDeleteTask}
         className="px-2 py-1 text-text-error hover:text-text-secondary rounded transition flex items-center gap-2"
       >
         <Trash2 size={16} /> Eliminar
@@ -967,16 +1236,7 @@ const Board: React.FC = () => {
 
               const updatedCard = resp && (resp as any).data ? (resp as any).data : { id: editingId, title: modalTitle, description: modalDescription };
 
-              setLists((prev) =>
-                prev.map((l) => ({
-                  ...l,
-                  cards: l.cards.map((c) =>
-                    c.id === editingId
-                      ? { ...c, title: (updatedCard.title ?? modalTitle), description: (updatedCard.description ?? modalDescription) }
-                      : c
-                  ),
-                }))
-              );
+              applyCardUpdate(setLists, editingId, updatedCard, modalTitle, modalDescription);
 
               setEditingTask(null);
             } catch (err) {
@@ -999,7 +1259,14 @@ const Board: React.FC = () => {
     <ModalBase
       isOpen={isScheduleModalOpen}
       onClose={() => {
-        if (scheduledLinks?.icsUrl) try { URL.revokeObjectURL(scheduledLinks.icsUrl); } catch {};
+        if (scheduledLinks?.icsUrl) {
+          try {
+            URL.revokeObjectURL(scheduledLinks.icsUrl);
+          } catch (err) {
+            console.error("Error revocando URL:", err);
+          }
+        }
+
         setIsScheduleModalOpen(false);
         setScheduledLinks(null);
         setScheduleRoomId(null);
@@ -1014,8 +1281,11 @@ const Board: React.FC = () => {
             Ya existe una llamada activa para esta tarjeta. Únete para continuar.
           </div>
         )}
-        <label className="block text-sm text-text-muted">Fecha y hora</label>
+        <label htmlFor="scheduleDateTime" className="block text-sm text-text-muted">
+          Fecha y hora
+        </label>
         <input
+          id="scheduleDateTime"
           type="datetime-local"
           value={scheduleDateTime}
           onChange={(e) => setScheduleDateTime(e.target.value)}
@@ -1024,8 +1294,14 @@ const Board: React.FC = () => {
 
         <div className="flex gap-2">
           <div className="flex-1">
-            <label className="block text-sm text-text-muted">Duración (min)</label>
+            <label
+              htmlFor="scheduleDurationMinutes"
+              className="block text-sm text-text-muted"
+            >
+              Duración (min)
+            </label>
             <input
+              id="scheduleDurationMinutes"
               type="number"
               value={scheduleDurationMinutes}
               onChange={(e) => setScheduleDurationMinutes(Number(e.target.value || 0))}
@@ -1034,8 +1310,14 @@ const Board: React.FC = () => {
             />
           </div>
           <div className="flex-1">
-            <label className="block text-sm text-text-muted">Asistentes (coma-separado)</label>
+            <label
+              htmlFor="scheduleAttendees"
+              className="block text-sm text-text-muted"
+            >
+              Asistentes (coma-separado)
+            </label>
             <input
+              id="scheduleAttendees"
               type="text"
               value={scheduleAttendees}
               onChange={(e) => setScheduleAttendees(e.target.value)}
@@ -1054,7 +1336,10 @@ const Board: React.FC = () => {
                 const attendees = scheduleAttendees.split(',').map(s=>s.trim()).filter(Boolean);
                 await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
               } catch (err) {
-                alert('Error creando invitación. Revisa la consola.');
+                console.error("Error creando invitación:", err); 
+                alert("Error creando invitación. Revisa la consola.");
+
+                throw err; 
               }
             }}
             disabled={isScheduling}
@@ -1075,21 +1360,29 @@ const Board: React.FC = () => {
                   await createCalendarEvent({ title: modalTitle || 'Llamada', description: modalDescription, start, end, attendees });
                 }
                 await handleLiveKit(scheduleRoomId, user?.email || '');
-              } catch (err) {
-                alert('Error al procesar la llamada. Revisa la consola.');
-              } finally {
-                setIsJoiningCall(false);
-              }
+                } catch (err) {
+                  console.error("Error al procesar la llamada:", err);
+                  alert("Error al procesar la llamada. Revisa la consola.");
+                  throw err; 
+                } finally {
+                  setIsJoiningCall(false);
+                }
             }}
             disabled={isScheduling || isJoiningCall}
             className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-dark-600 text-text-primary rounded-lg"
           >
-            {isScheduling || isJoiningCall ? 'Procesando...' : hasActiveCall ? <>Unirse a llamada <FaPhone /></> : <>Crear llamada <FaPhone /></>}
+            {actionLabel}
           </button>
 
           <button
             onClick={() => {
-              if (scheduledLinks?.icsUrl) try { URL.revokeObjectURL(scheduledLinks.icsUrl); } catch {};
+              if (scheduledLinks?.icsUrl) {
+                try {
+                  URL.revokeObjectURL(scheduledLinks.icsUrl);
+                } catch (err) {
+                  console.error("Error revocando URL:", err);
+                }
+              }
               setIsScheduleModalOpen(false);
               setScheduledLinks(null);
               setScheduleRoomId(null);
@@ -1116,20 +1409,34 @@ const Board: React.FC = () => {
                 />
                 <button
                   onClick={async () => {
+                    const text = scheduledLinks.shareLink || '';
+
                     try {
-                      await navigator.clipboard.writeText(scheduledLinks.shareLink || '');
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    } catch (e) {
-                      const el = document.createElement('textarea');
-                      el.value = scheduledLinks.shareLink || '';
-                      document.body.appendChild(el);
-                      el.select();
-                      document.execCommand('copy');
-                      document.body.removeChild(el);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
+                      await navigator.clipboard.writeText(text);
+                    } catch (error) {
+                      console.error("Clipboard API failed, using fallback:", error);
+
+                      const textarea = document.createElement("textarea");
+                      textarea.value = text;
+
+                      textarea.style.position = "fixed";
+                      textarea.style.opacity = "0";
+                      textarea.style.pointerEvents = "none";
+
+                      document.body.appendChild(textarea);
+                      textarea.select();
+
+                      try {
+                        await navigator.clipboard.writeText(textarea.value);
+                      } catch {
+                        console.warn("Copy fallback failed");
+                      }
+
+                      textarea.remove();
                     }
+
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
                   }}
                   className="px-3 py-1 bg-limeyellow-500 text-white rounded"
                 >Copiar</button>

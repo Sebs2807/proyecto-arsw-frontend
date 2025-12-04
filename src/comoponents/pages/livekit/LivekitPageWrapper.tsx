@@ -9,18 +9,23 @@ const LivekitPageWrapper: React.FC = () => {
   const state = location.state as { boardId?: string; cardId?: string } | null;
 
   const storedRoom =
-    typeof window !== "undefined"
-      ? window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY) ?? undefined
-      : undefined;
+    globalThis.window === undefined
+      ? undefined
+      : globalThis.window.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY) ?? undefined;
   const storedBoard =
-    typeof window !== "undefined"
-      ? window.sessionStorage.getItem(LIVEKIT_ACTIVE_BOARD_KEY) ?? undefined
-      : undefined;
+    globalThis.window === undefined
+      ? undefined
+      : globalThis.window.sessionStorage.getItem(LIVEKIT_ACTIVE_BOARD_KEY) ?? undefined;
 
   const boardId = state?.boardId ?? storedBoard;
   const cardId = state?.cardId ?? storedRoom ?? room;
 
-  const url = "ws://localhost:7880";
+  const defaultLivekitUrl = "ws://localhost:7880";
+  const envLivekitUrl = import.meta.env.VITE_LIVEKIT_URL;
+  const url =
+    import.meta.env.MODE === "test"
+      ? defaultLivekitUrl
+      : envLivekitUrl?.trim() || defaultLivekitUrl;
 
   if (!room || !token)
     return (

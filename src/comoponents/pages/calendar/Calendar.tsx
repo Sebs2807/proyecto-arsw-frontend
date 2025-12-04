@@ -50,15 +50,15 @@ const WeeklyCalendar: React.FC = () => {
         if (!d) return null;
         if (typeof d === "string") {
           const dt = new Date(d);
-          return isNaN(dt.getTime()) ? null : dt;
+          return Number.isNaN(dt.getTime()) ? null : dt;
         }
         if (d.dateTime) {
           const dt = new Date(d.dateTime);
-          return isNaN(dt.getTime()) ? null : dt;
+          return Number.isNaN(dt.getTime()) ? null : dt;
         }
         if (d.date) {
           const dt = new Date(d.date);
-          return isNaN(dt.getTime()) ? null : dt;
+          return Number.isNaN(dt.getTime()) ? null : dt;
         }
         return null;
       };
@@ -329,9 +329,9 @@ const WeeklyCalendar: React.FC = () => {
         <div className="bg-dark-800 border-r border-dark-600 p-2 text-text-muted text-center font-semibold">
           Hora
         </div>
-        {daysOfWeek.map((day, i) => (
+        {daysOfWeek.map((day) => (
           <div
-            key={i}
+            key={day.toISOString()} 
             className="bg-dark-800 border-r border-dark-600 p-2 text-center font-semibold text-text-muted"
           >
             {format(day, "EEE dd")}
