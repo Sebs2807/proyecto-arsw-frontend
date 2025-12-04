@@ -139,9 +139,6 @@ const WeeklyCalendar: React.FC = () => {
       try {
         window.dispatchEvent(new CustomEvent('calendar:updated'));
       } catch (e) {}
-      try {
-        window.dispatchEvent(new CustomEvent('calendar:updated'));
-      } catch (e) {}
     } catch (err) {
       console.error("Error deleting event:", err);
       // Mostrar mensaje más descriptivo
@@ -184,6 +181,9 @@ const WeeklyCalendar: React.FC = () => {
       setModalOpen(false);
       setSelectedEvent(null);
       await loadWeek(currentWeek);
+      try {
+        window.dispatchEvent(new CustomEvent('calendar:updated'));
+      } catch (e) {}
     } catch (err) {
       console.error("Error rescheduling event:", err);
       alert("No se pudo reagendar el evento");
