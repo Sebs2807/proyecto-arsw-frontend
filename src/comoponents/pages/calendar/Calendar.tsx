@@ -28,6 +28,8 @@ const WeeklyCalendar: React.FC = () => {
   const [newEndLocal, setNewEndLocal] = React.useState<string>("");
   const [newTitle, setNewTitle] = React.useState<string>("");
   const cacheRef = React.useRef<Record<string, CalendarEvent[]>>({});
+  // Local overrides for fields the backend may not accept/update (e.g. title)
+  const editsRef = React.useRef<Record<string, Partial<CalendarEvent>>>({});
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 });
   const weekEnd = addDays(weekStart, 7);
@@ -149,6 +151,9 @@ const WeeklyCalendar: React.FC = () => {
       // Update local state immediately so UI reflects deletion without waiting
       setEvents((prev) => prev.filter((e) => e.id !== deletedId));
 
+      // Remove any local overrides for the deleted event
+      try { delete editsRef.current[deletedId]; } catch (e) {}
+
       // Invalidate cache for the current week so loadWeek will refetch
       invalidateWeekCache(currentWeek);
       await loadWeek(currentWeek);
@@ -203,6 +208,13 @@ const WeeklyCalendar: React.FC = () => {
         )
       );
 
+      // If the user changed the title locally, keep it as an override
+      try {
+        if (newTitle && newTitle.trim() && newTitle !== selectedEvent.title) {
+          editsRef.current[updatedId] = { title: newTitle };
+        }
+      } catch (e) {}
+
       setModalOpen(false);
       setSelectedEvent(null);
       // Invalidate cache for the current week so loadWeek will refetch updated data
@@ -224,7 +236,13 @@ const WeeklyCalendar: React.FC = () => {
     const key = weekStart.toISOString();
 
     if (cacheRef.current[key]) {
-      setEvents(cacheRef.current[key]);
+      // Apply any local overrides to cached events
+      const cached = cacheRef.current[key];
+      const mergedCached = cached.map((ev) => {
+        const o = editsRef.current[ev.id];
+        return o ? { ...ev, ...o } : ev;
+      });
+      setEvents(mergedCached);
       prefetchWeek(addDays(weekStart, -7));
       prefetchWeek(addDays(weekStart, 7));
       return;
@@ -234,7 +252,12 @@ const WeeklyCalendar: React.FC = () => {
     const end = addDays(start, 7);
     const mapped = await fetchEventsForWeek(start, end);
     cacheRef.current[key] = mapped;
-    setEvents(mapped);
+    // Apply any local overrides stored for events
+    const merged = mapped.map((ev) => {
+      const o = editsRef.current[ev.id];
+      return o ? { ...ev, ...o } : ev;
+    });
+    setEvents(merged);
 
     prefetchWeek(addDays(start, -7));
     prefetchWeek(addDays(start, 7));
