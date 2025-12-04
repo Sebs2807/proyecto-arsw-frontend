@@ -38,6 +38,20 @@ const CalendarSidebar: React.FC = () => {
     fetchEvents(range);
   }, [range]);
 
+  // Refresh when other parts of the app dispatch a calendar update
+  React.useEffect(() => {
+    const onCalendarUpdated = () => {
+      try {
+        fetchEvents(range);
+      } catch (e) {
+        console.warn('CalendarSidebar: failed to refresh on calendar:updated', e);
+      }
+    };
+
+    window.addEventListener('calendar:updated', onCalendarUpdated as EventListener);
+    return () => window.removeEventListener('calendar:updated', onCalendarUpdated as EventListener);
+  }, [range]);
+
   const renderDate = (ev: EventItem) => {
     const dt = ev.start?.dateTime ?? ev.start?.date;
     if (!dt) return "-";

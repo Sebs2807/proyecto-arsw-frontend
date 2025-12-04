@@ -703,6 +703,13 @@ const Board: React.FC = () => {
   const shareLink = htmlLink || addUrl.toString();
   setScheduledLinks({ htmlLink, googleAddUrl: addUrl.toString(), icsUrl, shareLink });
 
+      // Notify other UI components (notifications float, etc.) to refresh
+      try {
+        window.dispatchEvent(new CustomEvent('calendar:updated'));
+      } catch (e) {
+        /* ignore */
+      }
+
       return { htmlLink, googleAddUrl: addUrl.toString(), icsUrl };
     } catch (err) {
       console.error('Error creando evento en calendario:', err);
