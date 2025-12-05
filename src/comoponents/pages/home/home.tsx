@@ -2,9 +2,9 @@ import React, { useMemo } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "../../../store";
 
-// Importa ambos gestores
 import MembersManager from "../../MembersManager";
 import BoardsManager from "../../BoardsManager";
+import AgentsManager from "../../AgentsManager";
 
 const Home: React.FC = () => {
   const { activeItem } = useSelector((state: RootState) => state.sidebar);
@@ -18,6 +18,10 @@ const Home: React.FC = () => {
       boards: {
         title: "Boards",
         description: "View and manage workspace boards.",
+      },
+      agents: {
+        title: "Agents",
+        description: "View and manage AI agents.",
       },
     }),
     []
@@ -40,6 +44,9 @@ const Home: React.FC = () => {
 
       case "boards":
         return <BoardsManager />;
+
+      case "agents":
+        return <AgentsManager />;
 
       default:
         return (
