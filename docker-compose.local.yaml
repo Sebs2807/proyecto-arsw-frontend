@@ -23,18 +23,3 @@ services:
         turn:
           enabled: false
     command: --dev
-
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        ENV: local
-    ports:
-      - "5173:5173"
-    volumes:
-      - .:/app
-      - /app/node_modules
-    environment:
-      - NODE_ENV=development
-    command: npm run dev

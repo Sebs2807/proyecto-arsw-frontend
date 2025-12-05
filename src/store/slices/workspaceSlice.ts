@@ -2,6 +2,7 @@ import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
 import type { PayloadAction } from "@reduxjs/toolkit";
 import { apiService } from "../../services/api/ApiService";
 
+// 🧩 Interfaces
 export interface Workspace {
   id: string;
   name: string;
@@ -19,30 +20,20 @@ export interface Board {
   updatedAt?: string;
 }
 
-export interface Agent {
-  id: string;
-  name: string;
-  workspaceId: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
-
+// 🧠 Estado global
 interface WorkspaceState {
   workspaces: Workspace[];
-  agents: Agent[];
   selectedWorkspace: Workspace | null;
-  selectedAgent: Agent | null;
-  selectedBoard: Board | null;
+  selectedBoard: Board | null; // <--- Nuevo
 }
 
 const initialState: WorkspaceState = {
   workspaces: [],
-  agents: [],
   selectedWorkspace: null,
-  selectedAgent: null,
   selectedBoard: null,
 };
 
+// 🚀 Thunk para cargar workspaces
 export const fetchWorkspaces = createAsyncThunk<Workspace[], void>(
   "workspace/fetchWorkspaces",
   async (_, { rejectWithValue }) => {
@@ -70,20 +61,7 @@ const workspaceSlice = createSlice({
     setSelectedWorkspace(state, action: PayloadAction<Workspace>) {
       state.selectedWorkspace = action.payload;
       state.selectedBoard = null;
-      state.selectedAgent = null;
     },
-
-    setAgents(state, action: PayloadAction<Agent[]>) {
-      state.agents = action.payload;
-      if (!state.selectedAgent && action.payload.length > 0) {
-        state.selectedAgent = action.payload[0];
-      }
-    },
-    setSelectedAgent(state, action: PayloadAction<Agent | null>) {
-      state.selectedAgent = action.payload;
-      state.selectedBoard = null;
-    },
-
     setSelectedBoard(state, action: PayloadAction<Board>) {
       state.selectedBoard = action.payload;
     },
@@ -104,8 +82,6 @@ const workspaceSlice = createSlice({
 export const {
   setWorkspaces,
   setSelectedWorkspace,
-  setAgents,
-  setSelectedAgent,
   setSelectedBoard,
   clearSelectedBoard,
 } = workspaceSlice.actions;
