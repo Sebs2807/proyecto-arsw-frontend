@@ -21,7 +21,6 @@ const ITEMS_PER_PAGE = 10;
 const BoardsManager: React.FC = () => {
   const activeWorkspaceId = useSelector((state: RootState) => state.workspace.selectedWorkspace?.id);
 
-  const [boards, setBoards] = useState<Board[]>([]);
   const [data, setData] = useState<TransformedRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -31,7 +30,6 @@ const BoardsManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [tempSearchTerm, setTempSearchTerm] = useState("");
   const [isFiltersVisible, setIsFiltersVisible] = useState(true);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalBoard, setModalBoard] = useState<Board | null>(null);
@@ -62,39 +60,34 @@ const BoardsManager: React.FC = () => {
 
   const applyFilters = useCallback(() => { setSearchTerm(tempSearchTerm); setPage(1); }, [tempSearchTerm]);
   const resetFilters = useCallback(() => { setSearchTerm(""); setTempSearchTerm(""); setPage(1); }, []);
-  
+
   const openModal = (mode: "add" | "edit" | "delete", board: Board | null = null) => {
     setModalMode(mode);
     setModalBoard(board);
     setIsModalOpen(true);
   };
-
-  const renderMembers = (members: UserDto[]) => {
-    return members.map((m) => (
-      <span
-        key={m.id}
-        className="inline-block bg-dark-600 text-text-primary text-xs px-2 py-1 mr-1 rounded"
-      >
-        {m.firstName} {m.lastName}
-      </span>
-    ));
-  };
-
+  // ---------------------------------------------
 
   const fetchData = useCallback(async () => {
     if (!activeWorkspaceId) return;
     const abortController = new AbortController();
     try {
       setLoading(true);
-      let query = `${CONFIG.endpoint}?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(activeWorkspaceId)}`;
-      if (searchTerm.trim()) query += `&search=${encodeURIComponent(searchTerm)}`;
-      const response = await apiService.get<PaginatedResponse<Board>>(query, { signal: abortController.signal });
-      setBoards(response.items || []);
+      let query = `${CONFIG.endpoint
+        }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
+          activeWorkspaceId
+        )}`;
+      if (searchTerm.trim())
+        query += `&search=${encodeURIComponent(searchTerm)}`;
+      const response = await apiService.get<PaginatedResponse<Board>>(query, {
+        signal: abortController.signal,
+      });
+
       setData(CONFIG.transform(response.items || []));
       setTotalItems(response.total ?? 0);
       setTotalPages(response.totalPages ?? 1);
     } catch (error: any) {
-      if (error.name !== "CanceledError") { console.error(`Error fetching ${CONFIG.title}:`, error); setData([]); setBoards([]); }
+      if (error.name !== "CanceledError") { console.error(`Error fetching ${CONFIG.title}:`, error); setData([]); }
     } finally { setLoading(false); }
     return () => abortController.abort();
   }, [page, searchTerm, activeWorkspaceId, CONFIG]);
@@ -116,6 +109,21 @@ const BoardsManager: React.FC = () => {
   const areFiltersUnchanged = tempSearchTerm === searchTerm;
   const isAnyFilterActive = searchTerm !== "";
 
+  let filterStatusLabel = null;
+  if (!areFiltersUnchanged) {
+    filterStatusLabel = (
+      <span className="ml-2 text-limeyellow-500 text-xs font-bold">
+        (Pending Apply)
+      </span>
+    );
+  } else if (isAnyFilterActive) {
+    filterStatusLabel = (
+      <span className="ml-2 text-text-secondary text-xs font-normal">
+        (Active)
+      </span>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full font-poppins">
       {/* Header & Filters */}
@@ -130,16 +138,23 @@ const BoardsManager: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer" onClick={() => setIsFiltersVisible(v => !v)}>
-          <h2 className="text-sm font-semibold text-text-primary">
+        <button
+          type="button"
+          className="w-full flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer bg-transparent"
+          onClick={() => setIsFiltersVisible(v => !v)}
+        >
+          <div className="text-sm font-semibold text-text-primary">
             Filters{" "}
-            {!areFiltersUnchanged ? <span className="ml-2 text-limeyellow-500 text-xs font-bold">(Pending Apply)</span>
-            : isAnyFilterActive ? <span className="ml-2 text-text-secondary text-xs font-normal">(Active)</span> : null}
-          </h2>
-          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
-            {isFiltersVisible ? <ChevronUpIcon className="w-4 h-4" /> : <ChevronDownIcon className="w-4 h-4" />}
-          </span>
+            {filterStatusLabel}
           </div>
+          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+            {isFiltersVisible ? (
+              <ChevronUpIcon className="w-4 h-4" />
+            ) : (
+              <ChevronDownIcon className="w-4 h-4" />
+            )}
+          </span>
+        </button>
 
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
@@ -177,32 +192,75 @@ const BoardsManager: React.FC = () => {
                 </thead>
                 <tbody>
                   {data.length === 0 ? (
-                    <tr><td colSpan={headers.length} className="px-4 py-6 text-center text-text-muted">No data available.</td></tr>
-                  ) : data.map((row, i) => (
-                    <Fragment key={row.id || i}>
-                      <tr onClick={() => setExpandedRow(expandedRow === i ? null : i)}
-                        className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"}`}>
-                        {headers.map(key => key === "actions" ? (
-                          <td key={key as string} className="px-4 py-3">
-                            <div className="flex items-center gap-2 justify-start">
-                              <button onClick={e => { e.stopPropagation(); openModal("edit", boards.find(b => b.id === row.id) || null); }}
-                                className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"><EditIcon className="w-4 h-4 text-text-primary" /></button>
-                              <button onClick={e => { e.stopPropagation(); openModal("delete", boards.find(b => b.id === row.id) || null); }}
-                                className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"><TrashIcon className="w-4 h-4 text-text-primary hover:text-red-500" /></button>
-                            </div>
-                          </td>
-                        ) : key === "color" ? (
-                          <td key={key as string} className="px-4 py-3">
-                            <span className="w-5 h-5 rounded-full border border-dark-700 block" style={{ backgroundColor: row.color }} />
-                          </td>
-                        ) : (
-                          <td key={key as string} className="px-4 py-3">
-                            {key === "members" ? row.members.map(m => <span key={m.id} className="inline-block bg-dark-600 text-text-primary text-xs px-2 py-1 mr-1 rounded">{m.firstName} {m.lastName}</span>) : row[key] || "-"}
-                          </td>
-                        ))}
-                      </tr>
-                    </Fragment>
-                  ))}
+                    <tr>
+                      <td
+                        colSpan={headers.length}
+                        className="px-4 py-6 text-center text-text-muted"
+                      >
+                        No data available.
+                      </td>
+                    </tr>
+                  ) : (
+                    data.map((row, i) => (
+                      <Fragment key={row.id || i}>
+                        <tr
+                          className={`border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
+                            }`}
+                        >
+                          {headers.map((key) =>
+                            key === "actions" ? (
+                              <td key={key as string} className="px-4 py-3">
+                                <div className="flex items-center gap-2 justify-start">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openModal("edit", row);
+                                    }}
+                                    className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"
+                                  >
+                                    <EditIcon className="w-4 h-4 text-text-primary" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openModal("delete", row);
+                                    }}
+                                    className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"
+                                  >
+                                    <TrashIcon className="w-4 h-4 text-text-primary hover:text-red-500" />
+                                  </button>
+                                </div>
+                              </td>
+
+                            ) : (() => {
+                              let content;
+
+                              if (key === "color") {
+                                content = (
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="w-5 h-5 rounded-full border border-dark-700"
+                                      style={{ backgroundColor: row.color }}
+                                    />
+                                  </div>
+                                );
+                              } else if (key === "members") {
+                                return null
+                              } else {
+                                content = row[key] || "-";
+                              }
+
+                              return (
+                                <td key={key as string} className="px-4 py-3">
+                                  {content}
+                                </td>
+                              );
+                            })()
+                          )}
+                        </tr>
+                      </Fragment>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -211,14 +269,34 @@ const BoardsManager: React.FC = () => {
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>–
-                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong> of <strong>{totalItems}</strong>
+                  Showing{" "}
+                  <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>
+                  {" "}–{" "}
+                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>
+                  {" "}of{" "}
+                  <strong>{totalItems}</strong>
                 </span>
+
                 <div className="flex items-center gap-1">
-                  <button onClick={() => setPage(p => Math.max(p - 1, 1))} disabled={page === 1 || loading} className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50"><ChevronLeftIcon className="w-4 h-4" /></button>
-                  {pageRange.map(p => (
-                    <button key={p} onClick={() => setPage(p)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${p === page ? "bg-limeyellow-500 text-dark-900" : "text-text-secondary hover:bg-dark-700"}`} disabled={loading}>{p}</button>
+                  <button
+                    onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                    disabled={page === 1 || loading}
+                    className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50"
+                  >
+                    <ChevronLeftIcon className="w-4 h-4" />
+                  </button>
+                  {pageRange.map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${p === page
+                        ? "bg-limeyellow-500 text-dark-900"
+                        : "text-text-secondary hover:bg-dark-700"
+                        }`}
+                      disabled={loading}
+                    >
+                      {p}
+                    </button>
                   ))}
                   <button onClick={() => setPage(p => Math.min(p + 1, totalPages))} disabled={page === totalPages || loading} className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button>
                 </div>

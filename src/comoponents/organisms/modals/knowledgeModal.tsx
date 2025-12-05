@@ -7,12 +7,12 @@ export interface KnowledgeItem {
   title: string;
   text: string;
   category:
-    | "product_feature"
-    | "pricing"
-    | "objection"
-    | "flow_step"
-    | "legal"
-    | "faq";
+  | "product_feature"
+  | "pricing"
+  | "objection"
+  | "flow_step"
+  | "legal"
+  | "faq";
   tags?: string[];
 }
 
@@ -34,6 +34,12 @@ const categories = [
   "faq",
 ] as const;
 
+const modalTitles = {
+  add: "Agregar conocimiento",
+  edit: "Editar conocimiento",
+  delete: "Eliminar conocimiento",
+} as const;
+
 const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
   isOpen,
   onClose,
@@ -42,7 +48,7 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
   mode,
   agentId,
 }) => {
-  if (!isOpen) return null;
+
 
   const isEditing = mode === "edit";
   const isDeleting = mode === "delete";
@@ -68,6 +74,8 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
       setTags([]);
     }
   }, [knowledge, isEditing, isDeleting]);
+
+  if (!isOpen) return null;
 
   const handleAddTag = () => {
     const newTag = tagInput.trim();
@@ -115,17 +123,21 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
     }
   };
 
+  const getSubmitButtonText = () => {
+    if (loading) return "Guardando...";
+    if (isEditing) return "Actualizar";
+    return "Crear";
+  };
+
+  const submitButtonText = getSubmitButtonText();
+
   return (
     <div className="fixed inset-0 bg-dark-950/80 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-dark-800 rounded-xl p-6 w-full max-w-xl shadow-xl border border-dark-600 max-h-[90vh] overflow-y-auto scrollbar-hide">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-lg font-semibold text-white">
-            {isDeleting
-              ? "Eliminar conocimiento"
-              : isEditing
-              ? "Editar conocimiento"
-              : "Agregar conocimiento"}
+            {modalTitles[mode]}
           </h2>
           <button
             onClick={onClose}
@@ -141,7 +153,7 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
               ¿Seguro que quieres eliminar el conocimiento{" "}
               <span className="text-limeyellow-500 font-semibold">
                 {knowledge?.title}
-              </span>
+              </span>{" "}
               ?
             </p>
             <div className="flex justify-end gap-2 mt-5">
@@ -163,10 +175,11 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-text-secondary mb-1">
+              <label htmlFor="title" className="block text-sm text-text-secondary mb-1">
                 Título
               </label>
               <input
+                id="title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 disabled={loading}
@@ -175,10 +188,11 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm text-text-secondary mb-1">
+              <label htmlFor="text" className="block text-sm text-text-secondary mb-1">
                 Texto
               </label>
               <textarea
+                id="text"
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 disabled={loading}
@@ -188,10 +202,11 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-sm text-text-secondary mb-1">
+              <label htmlFor="category" className="block text-sm text-text-secondary mb-1">
                 Categoría
               </label>
               <select
+                id="category"
                 value={category}
                 onChange={(e) =>
                   setCategory(e.target.value as KnowledgeItem["category"])
@@ -209,7 +224,7 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
 
             {/* Tags */}
             <div>
-              <label className="block text-sm text-text-secondary mb-1">
+              <label htmlFor="tags" className="block text-sm text-text-secondary mb-1">
                 Tags
               </label>
               <div className="flex gap-2 flex-wrap">
@@ -226,11 +241,15 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
                 ))}
               </div>
               <input
+                id="tags"
                 value={tagInput}
                 onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e) =>
-                  e.key === "Enter" && (e.preventDefault(), handleAddTag())
-                }
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    handleAddTag();
+                  }
+                }}
                 placeholder="Agregar tag y presiona Enter"
                 disabled={loading}
                 className="w-full mt-1 bg-dark-600 text-white rounded-lg px-3 py-2 text-sm outline-none border border-dark-600 focus:border-limeyellow-500"
@@ -251,7 +270,7 @@ const KnowledgeModal: React.FC<KnowledgeModalProps> = ({
                 disabled={loading || !isFormValid()}
                 className="px-3 py-2 bg-limeyellow-500 hover:bg-limeyellow-600 text-white rounded-lg text-sm disabled:opacity-50"
               >
-                {loading ? "Guardando..." : isEditing ? "Actualizar" : "Crear"}
+                {submitButtonText}
               </button>
             </div>
           </form>

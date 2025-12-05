@@ -47,11 +47,93 @@ const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   // Uso de globalThis para mejor compatibilidad universal (navegador/SSR)
   if (globalThis.window === undefined) return null;
   const portal = document.getElementById("drag-portal");
-  return ReactDOM.createPortal(
-    children,
-    portal ?? globalThis.window.document.body
-  );
+  return ReactDOM.createPortal(children, portal || document.body);
 };
+
+// --- Helper Functions (Extracted to reduce nesting) ---
+const listHasId = (id: string) => (list: List) => list.id === id;
+const updateListItem = (updated: List) => (l: List) =>
+  l.id === updated.id ? { ...l, ...updated } : l;
+const isNotId = (id: string) => (l: List) => l.id !== id;
+const cardExists = (cardId: string) => (c: Task) => c.id === cardId;
+const updateCard = (updatedCard: Task) => (c: Task) =>
+  c.id === updatedCard.id ? { ...c, ...updatedCard } : c;
+const isNotCard = (card: Task, cardId: string): boolean =>
+  card.id !== cardId;
+
+const addCardToList = (listId: string, card: Task) => (l: List) => {
+  if (l.id !== listId) return l;
+  if (l.cards.some(cardExists(card.id))) return l;
+  return { ...l, cards: [...l.cards, card] };
+};
+
+const updateListCards = (listId: string, card: Task) => (l: List) =>
+  l.id === listId ? { ...l, cards: l.cards.map(updateCard(card)) } : l;
+
+const removeCard = (lists: List[], cardId: string): List[] =>
+  lists.map((list) => ({
+    ...list,
+    cards: list.cards.filter((c) => isNotCard(c, cardId)),
+  }));
+
+const addCard = (lists: List[], destListId: string, card: Task): List[] =>
+  lists.map((list) =>
+    list.id === destListId
+      ? { ...list, cards: [...list.cards, card] }
+      : list
+  );
+
+const moveCard = (lists: List[], destListId: string, card: Task): List[] =>
+  addCard(removeCard(lists, card.id), destListId, card);
+
+const applyDrag = (lists: List[], data: any): List[] => {
+  const card = lists
+    .flatMap((l) => l.cards)
+    .find((c) => c.id === data.cardId);
+  if (!card) return lists;
+  const moved = moveCard(lists, data.destListId, card);
+  const listIndex = moved.findIndex((l) => l.id === data.destListId);
+  if (listIndex === -1) return lists;
+
+  const newLists = [...moved];
+  const list = { ...newLists[listIndex] };
+  list.cards = list.cards.filter((c) => c.id !== data.cardId);
+  list.cards.splice(data.destIndex, 0, card);
+  newLists[listIndex] = list;
+
+  return newLists;
+};
+
+const applyDragEnd = (
+  lists: List[],
+  cardId: string,
+  destListId: string,
+  destIndex: number
+): List[] => {
+  const sourceIndex = lists.findIndex((l) =>
+    l.cards.some((c) => c.id === cardId)
+  );
+  const destIndexList = lists.findIndex((l) => l.id === destListId);
+  if (sourceIndex === -1 || destIndexList === -1) return lists;
+
+  const card = lists[sourceIndex].cards.find((c) => c.id === cardId);
+  if (!card) return lists;
+
+  const newLists = [...lists];
+  const sourceList = { ...newLists[sourceIndex] };
+  const destList = { ...newLists[destIndexList] };
+
+  sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
+  destList.cards = destList.cards.filter((c) => c.id !== cardId);
+  destList.cards.splice(destIndex, 0, card);
+
+  newLists[sourceIndex] = sourceList;
+  newLists[destIndexList] = destList;
+  return newLists;
+};
+
+
+
 
 // --- Componente de Tarjeta Draggable (del segundo bloque, con indicador de llamada) ---
 const renderDraggableCard = ({
@@ -97,10 +179,9 @@ const renderDraggableCard = ({
       type="button"
       onClick={handleClick}
       className={`relative text-left w-full p-3 rounded-lg border text-sm transition-all duration-300
-        ${
-          snapshot.isDragging
-            ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
-            : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
+        ${snapshot.isDragging
+          ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
+          : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
         }
         ${isBeingDraggedByAnother ? "opacity-50 cursor-not-allowed" : ""}`}
     >
@@ -152,24 +233,24 @@ const draggableRenderer =
     setModalIndustry,
     setModalPriority,
   }: any) =>
-  (provided: any, snapshot: any) =>
-    renderDraggableCard({
-      task,
-      user,
-      provided,
-      snapshot,
-      draggingCards,
-      draggingNames,
-      activeCalls,
-      setEditingTask,
-      setModalTitle,
-      setModalDescription,
-      setModalContactName,
-      setModalContactEmail,
-      setModalContactPhone,
-      setModalIndustry,
-      setModalPriority,
-    });
+    (provided: any, snapshot: any) =>
+      renderDraggableCard({
+        task,
+        user,
+        provided,
+        snapshot,
+        draggingCards,
+        draggingNames,
+        activeCalls,
+        setEditingTask,
+        setModalTitle,
+        setModalDescription,
+        setModalContactName,
+        setModalContactEmail,
+        setModalContactPhone,
+        setModalIndustry,
+        setModalPriority,
+      });
 
 // --- Componente Principal Board ---
 
@@ -290,40 +371,6 @@ const Board: React.FC = () => {
     if (!selectedBoard?.id) return;
     const boardId = selectedBoard.id;
 
-    // --- Funciones auxiliares del segundo bloque (limpieza) ---
-    const listHasId = (id: string) => (list: List) => list.id === id;
-    const updateListItem = (updated: List) => (l: List) =>
-      l.id === updated.id ? { ...l, ...updated } : l;
-    const isNotId = (id: string) => (l: List) => l.id !== id;
-    const cardExists = (cardId: string) => (c: Task) => c.id === cardId;
-    const updateCard = (updatedCard: Task) => (c: Task) =>
-      c.id === updatedCard.id ? { ...c, ...updatedCard } : c;
-    const isNotCard = (card: Task, cardId: string): boolean =>
-      card.id !== cardId;
-
-    const addCardToList = (listId: string, card: Task) => (l: List) => {
-      if (l.id !== listId) return l;
-      if (l.cards.some(cardExists(card.id))) return l;
-      return { ...l, cards: [...l.cards, card] };
-    };
-
-    const updateListCards = (listId: string, card: Task) => (l: List) =>
-      l.id === listId ? { ...l, cards: l.cards.map(updateCard(card)) } : l;
-
-    const removeCard = (lists: List[], cardId: string): List[] =>
-      lists.map((list) => ({
-        ...list,
-        cards: list.cards.filter((c) => isNotCard(c, cardId)),
-      }));
-    const addCard = (lists: List[], destListId: string, card: Task): List[] =>
-      lists.map((list) =>
-        list.id === destListId
-          ? { ...list, cards: [...list.cards, card] }
-          : list
-      );
-    const moveCard = (lists: List[], destListId: string, card: Task): List[] =>
-      addCard(removeCard(lists, card.id), destListId, card);
-
     // --- Manejadores de Sockets (del segundo bloque) ---
     const handleNewList = (newList: List) =>
       setLists((prev) =>
@@ -339,14 +386,8 @@ const Board: React.FC = () => {
       setLists((prev) => prev.map(addCardToList(listId, card)));
     const handleCardUpdated = (listId: string, card: Task) =>
       setLists((prev) => prev.map(updateListCards(listId, card)));
-    const handleCardDeleted = (listId: string, cardId: string) =>
-      setLists((prev) =>
-        prev.map((l) =>
-          l.id === listId
-            ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
-            : l
-        )
-      );
+    const handleCardDeleted = (_listId: string, cardId: string) =>
+      setLists((prev) => removeCard(prev, cardId));
     const handleCardMovedExternally = (
       _sourceListId: string,
       destListId: string,
@@ -488,23 +529,7 @@ const Board: React.FC = () => {
       }));
     }
 
-    function applyDrag(lists: List[], data: any): List[] {
-      const card = lists
-        .flatMap((l) => l.cards)
-        .find((c) => c.id === data.cardId);
-      if (!card) return lists;
-      const moved = moveCard(lists, data.destListId, card);
-      const listIndex = moved.findIndex((l) => l.id === data.destListId);
-      if (listIndex === -1) return lists;
 
-      const newLists = [...moved];
-      const list = { ...newLists[listIndex] };
-      list.cards = list.cards.filter((c) => c.id !== data.cardId);
-      list.cards.splice(data.destIndex, 0, card);
-      newLists[listIndex] = list;
-
-      return newLists;
-    }
 
     apiService.socket?.on("card:dragUpdate", (data) => {
       updateDraggingCards(data);
@@ -519,33 +544,7 @@ const Board: React.FC = () => {
       });
     }
 
-    function applyDragEnd(
-      lists: List[],
-      cardId: string,
-      destListId: string,
-      destIndex: number
-    ): List[] {
-      const sourceIndex = lists.findIndex((l) =>
-        l.cards.some((c) => c.id === cardId)
-      );
-      const destIndexList = lists.findIndex((l) => l.id === destListId);
-      if (sourceIndex === -1 || destIndexList === -1) return lists;
 
-      const card = lists[sourceIndex].cards.find((c) => c.id === cardId);
-      if (!card) return lists;
-
-      const newLists = [...lists];
-      const sourceList = { ...newLists[sourceIndex] };
-      const destList = { ...newLists[destIndexList] };
-
-      sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
-      destList.cards = destList.cards.filter((c) => c.id !== cardId);
-      destList.cards.splice(destIndex, 0, card);
-
-      newLists[sourceIndex] = sourceList;
-      newLists[destIndexList] = destList;
-      return newLists;
-    }
 
     apiService.socket?.on(
       "card:dragEnd",
@@ -607,14 +606,12 @@ const Board: React.FC = () => {
       // El segundo bloque usa PUT, el primero PATCH/PUT. Usamos PATCH para actualizar solo listId.
       await apiService.patch(`/v1/cards/${draggableId}`, {
         listId: destination.droppableId,
-        sourceListId: source.droppableId, // Enviamos el source list también
+        sourceListId: source.droppableId,
       });
     } catch (err) {
       console.error("Error al mover la tarea:", err);
-      // Opcional: Revertir el estado (handle error)
     }
 
-    // Notificación de fin de arrastre para limpiar el estado 'draggingCards' en otros clientes
     apiService.socket?.emit("card:dragEnd", {
       boardId: selectedBoard?.id,
       cardId: draggableId,
@@ -840,9 +837,9 @@ const Board: React.FC = () => {
 
       // Notify other UI components (notifications float, etc.) to refresh
       try {
-        window.dispatchEvent(new CustomEvent('calendar:updated'));
+        globalThis.dispatchEvent(new CustomEvent('calendar:updated'));
       } catch (e) {
-        /* ignore */
+        console.error("Error dispatching calendar:updated event:", e);
       }
 
       return { htmlLink, googleAddUrl: addUrl.toString(), icsUrl };
@@ -900,10 +897,8 @@ const Board: React.FC = () => {
     setIsCreating(true);
     try {
       await apiService.post<Task>("/v1/cards", {
-        cardData: {
-          title: newTaskTitle,
-          description: newTaskDescription || "Sin descripción",
-        },
+        title: newTaskTitle,
+        description: newTaskDescription || "Sin descripción",
         listId,
       });
       setNewTaskTitle("");
@@ -923,12 +918,7 @@ const Board: React.FC = () => {
 
     try {
       await apiService.delete(`/v1/cards/${editingTask.id}`);
-      setLists((prev) =>
-        prev.map((l) => ({
-          ...l,
-          cards: l.cards.filter((c) => c.id !== editingTask.id),
-        }))
-      );
+      setLists((prev) => removeCard(prev, editingTask.id));
       setEditingTask(null);
     } catch (err) {
       console.error("Error eliminando tarea:", err);
@@ -945,9 +935,9 @@ const Board: React.FC = () => {
     cards: list.cards.map((c) =>
       c.id === cardId
         ? {
-            ...c,
-            ...updatedCard,
-          }
+          ...c,
+          ...updatedCard,
+        }
         : c
     ),
   });
@@ -967,24 +957,31 @@ const Board: React.FC = () => {
     const editingId = editingTask.id;
 
     try {
-      const rawPayload = {
-        title: modalTitle,
-        description: modalDescription,
-        contactName: modalContactName,
-        contactEmail: modalContactEmail,
-        contactPhone: modalContactPhone,
-        industry: modalIndustry,
-        priority: modalPriority,
+      const payload: Partial<Task> = {
+        title: modalTitle.trim(),
+        description: modalDescription.trim(),
+        contactName: modalContactName.trim(),
+        contactEmail: modalContactEmail.trim() || undefined,
+        contactPhone: modalContactPhone.trim(),
+        industry: modalIndustry.trim(),
+        priority: (modalPriority.trim() || undefined) as any,
       };
-      // Filtra campos vacíos/nulos/undefined
-      const payload = Object.fromEntries(
-        Object.entries(rawPayload).filter(
-          ([, v]) => v !== "" && v !== undefined && v !== null
-        )
-      ) as Partial<Task>;
+
+      // Eliminar claves undefined
+      Object.keys(payload).forEach((key) => {
+        if (payload[key as keyof Task] === undefined) {
+          delete payload[key as keyof Task];
+        }
+      });
+
+      if (!payload.title && editingTask.title) {
+        alert("El título de la tarea no puede estar vacío.");
+        setIsSaving(false);
+        return;
+      }
 
       const resp = await apiService.patch(`/v1/cards/${editingId}`, payload);
-      const updated = resp && (resp as any).data ? (resp as any).data : payload; // Usa la respuesta si es completa, sino usa el payload
+      const updated = resp && (resp as any).data ? (resp as any).data : payload;
 
       applyCardUpdate(editingId, updated);
       setEditingTask(null);
@@ -1454,6 +1451,7 @@ const Board: React.FC = () => {
                     attendees,
                   });
                 } catch (err) {
+                  console.error("Error creando invitación:", err);
                   alert("Error creando invitación. Revisa la consola.");
                 }
               }}
@@ -1493,6 +1491,7 @@ const Board: React.FC = () => {
                   }
                   await handleLiveKit(scheduleRoomId, user?.email || "");
                 } catch (err) {
+                  console.error("Error al procesar la llamada:", err);
                   alert("Error al procesar la llamada. Revisa la consola.");
                 }
               }}
@@ -1549,16 +1548,13 @@ const Board: React.FC = () => {
                       const text = scheduledLinks.shareLink || "";
                       try {
                         await navigator.clipboard.writeText(text);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
                       } catch (e) {
-                        const el = document.createElement("textarea");
-                        el.value = text;
-                        document.body.appendChild(el);
-                        el.select();
-                        document.execCommand("copy");
-                        el.remove();
+                        // If clipboard API fails, inform the user
+                        console.error("Failed to copy to clipboard:", e);
+                        alert("No se pudo copiar al portapapeles. Por favor, copia el enlace manualmente.");
                       }
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
                     }}
                     className="px-3 py-1 bg-limeyellow-500 text-white rounded"
                   >
