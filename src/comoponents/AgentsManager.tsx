@@ -246,17 +246,11 @@ const AgentsManager: React.FC = () => {
           </button>
         </div>
 
-        <div
-          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer"
-          role="button"
-          tabIndex={0}
+        <button
+          type="button"
+          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer w-full text-left"
           onClick={() => setIsFiltersVisible((v) => !v)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              setIsFiltersVisible((v) => !v);
-            }
-          }}
-          aria-pressed={isFiltersVisible}
+          aria-expanded={isFiltersVisible}
         >
           <h2 className="text-sm font-semibold text-text-primary">
             Filters{" "}
@@ -271,14 +265,14 @@ const AgentsManager: React.FC = () => {
               </span>
             )}
           </h2>
-          <button className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+          <span className="p-1 text-text-secondary">
             {isFiltersVisible ? (
               <ChevronUpIcon className="w-4 h-4" />
             ) : (
               <ChevronDownIcon className="w-4 h-4" />
             )}
-          </button>
-        </div>
+          </span>
+        </button>
 
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
@@ -358,13 +352,6 @@ const AgentsManager: React.FC = () => {
                           onClick={() =>
                             setExpandedRow(expandedRow === i ? null : i)
                           }
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter" || e.key === " ") {
-                              setExpandedRow(expandedRow === i ? null : i);
-                            }
-                          }}
-                          tabIndex={0}
-                          role="button"
                           className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
                             }`}
                         >
@@ -411,9 +398,7 @@ const AgentsManager: React.FC = () => {
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>-
-                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>{" "}
-                  of <strong>{totalItems}</strong>
+                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>-<strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong> of <strong>{totalItems}</strong>
                 </span>
                 <div className="flex items-center gap-1">
                   <button
@@ -429,8 +414,8 @@ const AgentsManager: React.FC = () => {
                       key={p}
                       onClick={() => setPage(p)}
                       className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${p === page
-                          ? "bg-limeyellow-500 text-dark-900"
-                          : "text-text-secondary hover:bg-dark-700"
+                        ? "bg-limeyellow-500 text-dark-900"
+                        : "text-text-secondary hover:bg-dark-700"
                         }`}
                       disabled={loading}
                     >
@@ -459,7 +444,7 @@ const AgentsManager: React.FC = () => {
         agent={modalAgent}
         mode={modalMode}
       />
-    </div>
+    </div >
   );
 };
 
