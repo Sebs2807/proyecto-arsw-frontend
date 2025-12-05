@@ -114,21 +114,16 @@ const AgentPicker: React.FC = () => {
           placeholder="Selecciona un agente..."
           className="w-full px-3 py-1.5 bg-dark-800 text-text-primary rounded-lg border border-dark-600 focus:outline-none focus:border-limeyellow-500 transition-colors text-sm"
         />
-        <ChevronDownIcon
+        <button
+          type="button"
           onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-          role="button"
-          tabIndex={0}
           aria-expanded={isDropdownOpen}
           aria-label="Mostrar opciones de agentes"
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              setIsDropdownOpen((open) => !open);
-            }
-          }}
-          className={`absolute right-2 top-1/2 -translate-y-1/2 w-3 h-3 text-text-secondary cursor-pointer transition-transform ${
-            isDropdownOpen ? "rotate-180" : ""
-          }`}
-        />
+          className={`absolute right-2 top-1/2 -translate-y-1/2 p-0 border-0 bg-transparent cursor-pointer text-text-secondary transition-transform ${isDropdownOpen ? "rotate-180" : ""
+            }`}
+        >
+          <ChevronDownIcon className="w-3 h-3" />
+        </button>
       </div>
 
       {isDropdownOpen && (
@@ -144,17 +139,17 @@ const AgentPicker: React.FC = () => {
             <>
               {filteredAgents.length > 0 ? (
                 filteredAgents.map((agent) => (
-                  <div
+                  <button
+                    type="button"
                     key={agent.id}
-                    onMouseDown={() => handleSelectAgent(agent)}
-                    className={`px-3 py-2 cursor-pointer transition-colors text-sm ${
-                      selectedAgent?.id === agent.id
-                        ? "bg-limeyellow-500 text-white"
-                        : "hover:bg-limeyellow-500 hover:text-white text-text-primary"
-                    }`}
+                    onClick={() => handleSelectAgent(agent)}
+                    className={`w-full text-left px-3 py-2 cursor-pointer transition-colors text-sm ${selectedAgent?.id === agent.id
+                      ? "bg-limeyellow-500 text-white"
+                      : "hover:bg-limeyellow-500 hover:text-white text-text-primary"
+                      }`}
                   >
                     {agent.name}
-                  </div>
+                  </button>
                 ))
               ) : (
                 <div className="px-3 py-2 text-text-secondary text-xs">

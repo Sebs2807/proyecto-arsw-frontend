@@ -47,11 +47,93 @@ const DragOverlayPortal: React.FC<{ children: React.ReactNode }> = ({
   // Uso de globalThis para mejor compatibilidad universal (navegador/SSR)
   if (globalThis.window === undefined) return null;
   const portal = document.getElementById("drag-portal");
-  return ReactDOM.createPortal(
-    children,
-    portal ?? globalThis.window.document.body
-  );
+  return ReactDOM.createPortal(children, portal || document.body);
 };
+
+// --- Helper Functions (Extracted to reduce nesting) ---
+const listHasId = (id: string) => (list: List) => list.id === id;
+const updateListItem = (updated: List) => (l: List) =>
+  l.id === updated.id ? { ...l, ...updated } : l;
+const isNotId = (id: string) => (l: List) => l.id !== id;
+const cardExists = (cardId: string) => (c: Task) => c.id === cardId;
+const updateCard = (updatedCard: Task) => (c: Task) =>
+  c.id === updatedCard.id ? { ...c, ...updatedCard } : c;
+const isNotCard = (card: Task, cardId: string): boolean =>
+  card.id !== cardId;
+
+const addCardToList = (listId: string, card: Task) => (l: List) => {
+  if (l.id !== listId) return l;
+  if (l.cards.some(cardExists(card.id))) return l;
+  return { ...l, cards: [...l.cards, card] };
+};
+
+const updateListCards = (listId: string, card: Task) => (l: List) =>
+  l.id === listId ? { ...l, cards: l.cards.map(updateCard(card)) } : l;
+
+const removeCard = (lists: List[], cardId: string): List[] =>
+  lists.map((list) => ({
+    ...list,
+    cards: list.cards.filter((c) => isNotCard(c, cardId)),
+  }));
+
+const addCard = (lists: List[], destListId: string, card: Task): List[] =>
+  lists.map((list) =>
+    list.id === destListId
+      ? { ...list, cards: [...list.cards, card] }
+      : list
+  );
+
+const moveCard = (lists: List[], destListId: string, card: Task): List[] =>
+  addCard(removeCard(lists, card.id), destListId, card);
+
+const applyDrag = (lists: List[], data: any): List[] => {
+  const card = lists
+    .flatMap((l) => l.cards)
+    .find((c) => c.id === data.cardId);
+  if (!card) return lists;
+  const moved = moveCard(lists, data.destListId, card);
+  const listIndex = moved.findIndex((l) => l.id === data.destListId);
+  if (listIndex === -1) return lists;
+
+  const newLists = [...moved];
+  const list = { ...newLists[listIndex] };
+  list.cards = list.cards.filter((c) => c.id !== data.cardId);
+  list.cards.splice(data.destIndex, 0, card);
+  newLists[listIndex] = list;
+
+  return newLists;
+};
+
+const applyDragEnd = (
+  lists: List[],
+  cardId: string,
+  destListId: string,
+  destIndex: number
+): List[] => {
+  const sourceIndex = lists.findIndex((l) =>
+    l.cards.some((c) => c.id === cardId)
+  );
+  const destIndexList = lists.findIndex((l) => l.id === destListId);
+  if (sourceIndex === -1 || destIndexList === -1) return lists;
+
+  const card = lists[sourceIndex].cards.find((c) => c.id === cardId);
+  if (!card) return lists;
+
+  const newLists = [...lists];
+  const sourceList = { ...newLists[sourceIndex] };
+  const destList = { ...newLists[destIndexList] };
+
+  sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
+  destList.cards = destList.cards.filter((c) => c.id !== cardId);
+  destList.cards.splice(destIndex, 0, card);
+
+  newLists[sourceIndex] = sourceList;
+  newLists[destIndexList] = destList;
+  return newLists;
+};
+
+
+
 
 // --- Componente de Tarjeta Draggable (del segundo bloque, con indicador de llamada) ---
 const renderDraggableCard = ({
@@ -289,40 +371,6 @@ const Board: React.FC = () => {
     if (!selectedBoard?.id) return;
     const boardId = selectedBoard.id;
 
-    // --- Funciones auxiliares del segundo bloque (limpieza) ---
-    const listHasId = (id: string) => (list: List) => list.id === id;
-    const updateListItem = (updated: List) => (l: List) =>
-      l.id === updated.id ? { ...l, ...updated } : l;
-    const isNotId = (id: string) => (l: List) => l.id !== id;
-    const cardExists = (cardId: string) => (c: Task) => c.id === cardId;
-    const updateCard = (updatedCard: Task) => (c: Task) =>
-      c.id === updatedCard.id ? { ...c, ...updatedCard } : c;
-    const isNotCard = (card: Task, cardId: string): boolean =>
-      card.id !== cardId;
-
-    const addCardToList = (listId: string, card: Task) => (l: List) => {
-      if (l.id !== listId) return l;
-      if (l.cards.some(cardExists(card.id))) return l;
-      return { ...l, cards: [...l.cards, card] };
-    };
-
-    const updateListCards = (listId: string, card: Task) => (l: List) =>
-      l.id === listId ? { ...l, cards: l.cards.map(updateCard(card)) } : l;
-
-    const removeCard = (lists: List[], cardId: string): List[] =>
-      lists.map((list) => ({
-        ...list,
-        cards: list.cards.filter((c) => isNotCard(c, cardId)),
-      }));
-    const addCard = (lists: List[], destListId: string, card: Task): List[] =>
-      lists.map((list) =>
-        list.id === destListId
-          ? { ...list, cards: [...list.cards, card] }
-          : list
-      );
-    const moveCard = (lists: List[], destListId: string, card: Task): List[] =>
-      addCard(removeCard(lists, card.id), destListId, card);
-
     // --- Manejadores de Sockets (del segundo bloque) ---
     const handleNewList = (newList: List) =>
       setLists((prev) =>
@@ -338,14 +386,8 @@ const Board: React.FC = () => {
       setLists((prev) => prev.map(addCardToList(listId, card)));
     const handleCardUpdated = (listId: string, card: Task) =>
       setLists((prev) => prev.map(updateListCards(listId, card)));
-    const handleCardDeleted = (listId: string, cardId: string) =>
-      setLists((prev) =>
-        prev.map((l) =>
-          l.id === listId
-            ? { ...l, cards: l.cards.filter((c) => c.id !== cardId) }
-            : l
-        )
-      );
+    const handleCardDeleted = (_listId: string, cardId: string) =>
+      setLists((prev) => removeCard(prev, cardId));
     const handleCardMovedExternally = (
       _sourceListId: string,
       destListId: string,
@@ -487,23 +529,7 @@ const Board: React.FC = () => {
       }));
     }
 
-    function applyDrag(lists: List[], data: any): List[] {
-      const card = lists
-        .flatMap((l) => l.cards)
-        .find((c) => c.id === data.cardId);
-      if (!card) return lists;
-      const moved = moveCard(lists, data.destListId, card);
-      const listIndex = moved.findIndex((l) => l.id === data.destListId);
-      if (listIndex === -1) return lists;
 
-      const newLists = [...moved];
-      const list = { ...newLists[listIndex] };
-      list.cards = list.cards.filter((c) => c.id !== data.cardId);
-      list.cards.splice(data.destIndex, 0, card);
-      newLists[listIndex] = list;
-
-      return newLists;
-    }
 
     apiService.socket?.on("card:dragUpdate", (data) => {
       updateDraggingCards(data);
@@ -518,33 +544,7 @@ const Board: React.FC = () => {
       });
     }
 
-    function applyDragEnd(
-      lists: List[],
-      cardId: string,
-      destListId: string,
-      destIndex: number
-    ): List[] {
-      const sourceIndex = lists.findIndex((l) =>
-        l.cards.some((c) => c.id === cardId)
-      );
-      const destIndexList = lists.findIndex((l) => l.id === destListId);
-      if (sourceIndex === -1 || destIndexList === -1) return lists;
 
-      const card = lists[sourceIndex].cards.find((c) => c.id === cardId);
-      if (!card) return lists;
-
-      const newLists = [...lists];
-      const sourceList = { ...newLists[sourceIndex] };
-      const destList = { ...newLists[destIndexList] };
-
-      sourceList.cards = sourceList.cards.filter((c) => c.id !== cardId);
-      destList.cards = destList.cards.filter((c) => c.id !== cardId);
-      destList.cards.splice(destIndex, 0, card);
-
-      newLists[sourceIndex] = sourceList;
-      newLists[destIndexList] = destList;
-      return newLists;
-    }
 
     apiService.socket?.on(
       "card:dragEnd",
@@ -835,6 +835,13 @@ const Board: React.FC = () => {
         shareLink,
       });
 
+      // Notify other UI components (notifications float, etc.) to refresh
+      try {
+        globalThis.dispatchEvent(new CustomEvent('calendar:updated'));
+      } catch (e) {
+        console.error("Error dispatching calendar:updated event:", e);
+      }
+
       return { htmlLink, googleAddUrl: addUrl.toString(), icsUrl };
     } catch (err) {
       console.error("Error creando evento en calendario:", err);
@@ -911,12 +918,7 @@ const Board: React.FC = () => {
 
     try {
       await apiService.delete(`/v1/cards/${editingTask.id}`);
-      setLists((prev) =>
-        prev.map((l) => ({
-          ...l,
-          cards: l.cards.filter((c) => c.id !== editingTask.id),
-        }))
-      );
+      setLists((prev) => removeCard(prev, editingTask.id));
       setEditingTask(null);
     } catch (err) {
       console.error("Error eliminando tarea:", err);

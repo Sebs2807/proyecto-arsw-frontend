@@ -1,17 +1,17 @@
-import React from "react";
+import React, { useState } from "react";
 import Brain from "../../assets/brain.svg?react";
 import WorkspaceDropdown from "../atoms/WorkspaceDropdown";
 import { useDispatch, useSelector } from "react-redux";
 import { setSelectedWorkspace } from "../../store/slices/workspaceSlice";
 import type { RootState, AppDispatch } from "../../store";
-
+import { apiService } from "../../services/api/ApiService";
 interface NavbarProps {
   onCreateWorkspace: () => void;
 }
 
 const Navbar: React.FC<NavbarProps> = ({ onCreateWorkspace }) => {
   const dispatch = useDispatch<AppDispatch>();
-
+  const [loading, setLoading] = useState(false);
   const workspaces = useSelector(
     (state: RootState) => state.workspace.workspaces
   );
@@ -34,6 +34,31 @@ const Navbar: React.FC<NavbarProps> = ({ onCreateWorkspace }) => {
         }}
         onCreate={onCreateWorkspace}
       />
+
+      {/* Perfil / notificaciones */}
+      <div className="flex items-center gap-3">
+        <button
+          onClick={async () => {
+            if (loading) return;
+            try {
+              setLoading(true);
+              // Ask backend to logout and revoke Google tokens
+              await apiService.post('/v1/auth/logout', { revokeGoogle: true });
+
+              // Redirect back to frontend login page
+              globalThis.location.href = 'https://localhost:5173/login';
+            } catch (err) {
+              console.error('Logout failed', err);
+              alert('No se pudo cerrar la sesión');
+            } finally {
+              setLoading(false);
+            }
+          }}
+          className="px-3 py-1 bg-dark-700 rounded hover:bg-dark-600 text-sm"
+        >
+          {loading ? 'Cerrando...' : 'Cerrar sesión'}
+        </button>
+      </div>
     </div>
   );
 };
