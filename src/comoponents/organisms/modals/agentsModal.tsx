@@ -211,11 +211,20 @@ const AgentModal: React.FC<AgentModalProps> = ({
     setSelectedLists((prev) => prev.filter((l) => l.id !== id));
   };
 
-  const modalTitle = isDeleting
-    ? "Delete Agent"
-    : isEditing
-    ? "Edit Agent"
-    : "Create Agent";
+  let modalTitle = "";
+  if (isDeleting) {
+    modalTitle = "Delete Agent";
+  } else if (isEditing) {
+    modalTitle = "Edit Agent";
+  } else {
+    modalTitle = "Create Agent";
+  }
+
+  const getButtonLabel = () => {
+    if (loading) return "Saving...";
+    if (isEditing) return "Update";
+    return "Create";
+  };
 
   if (!isOpen) return null;
 
@@ -237,8 +246,9 @@ const AgentModal: React.FC<AgentModalProps> = ({
         {isDeleting ? (
           <>
             <p className="text-text-secondary text-sm">
-              Are you sure you want to delete the agent{' '}
+              Are you sure you want to delete the agent
               <span className="text-limeyellow-500 font-semibold">
+                {" "}
                 {agent?.name}
               </span>
               ?
@@ -264,7 +274,10 @@ const AgentModal: React.FC<AgentModalProps> = ({
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name */}
             <div>
-              <label htmlFor="agent-name" className="block text-sm text-text-secondary mb-1 font-medium">
+              <label
+                htmlFor="agent-name"
+                className="block text-sm text-text-secondary mb-1 font-medium"
+              >
                 Agent Name *
               </label>
               <input
@@ -279,7 +292,10 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
             {/* Temperature */}
             <div>
-              <label htmlFor="agent-temperature" className="block text-sm text-text-secondary mb-1 font-medium">
+              <label
+                htmlFor="agent-temperature"
+                className="block text-sm text-text-secondary mb-1 font-medium"
+              >
                 Temperature (0.0 - 2.0)
               </label>
               <input
@@ -301,7 +317,10 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
             {/* Max Tokens */}
             <div>
-              <label htmlFor="agent-max-tokens" className="block text-sm text-text-secondary mb-1 font-medium">
+              <label
+                htmlFor="agent-max-tokens"
+                className="block text-sm text-text-secondary mb-1 font-medium"
+              >
                 Max Tokens
               </label>
               <input
@@ -309,7 +328,9 @@ const AgentModal: React.FC<AgentModalProps> = ({
                 type="number"
                 min="1"
                 value={maxTokens}
-                onChange={(e) => setMaxTokens(parseInt(e.target.value) || 500)}
+                onChange={(e) =>
+                  setMaxTokens(Number.parseInt(e.target.value) || 500)
+                }
                 className="w-full bg-dark-600 text-white rounded-lg px-3 py-2 text-sm border border-dark-600 focus:border-limeyellow-500 focus:outline-none transition-colors"
               />
               <p className="text-xs text-text-muted mt-1">
@@ -319,7 +340,10 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
             {/* Flow Config */}
             <div>
-              <label htmlFor="agent-flow-config" className="block text-sm text-text-secondary mb-1 font-medium">
+              <label
+                htmlFor="agent-flow-config"
+                className="block text-sm text-text-secondary mb-1 font-medium"
+              >
                 Flow Config (JSON)
               </label>
               <textarea
@@ -337,7 +361,10 @@ const AgentModal: React.FC<AgentModalProps> = ({
 
             {/* Board search */}
             <div className="relative">
-              <label htmlFor="board-search" className="block text-sm text-text-secondary mb-1 font-medium">
+              <label
+                htmlFor="board-search"
+                className="block text-sm text-text-secondary mb-1 font-medium"
+              >
                 Assign Boards
               </label>
               <input
@@ -348,37 +375,15 @@ const AgentModal: React.FC<AgentModalProps> = ({
                   setSearchBoards(e.target.value);
                   fetchBoardSuggestions(e.target.value);
                 }}
-                onFocus={() => setShowBoardSuggestions(true)}
-                onBlur={() =>
-                  setTimeout(() => setShowBoardSuggestions(false), 200)
-                }
+                list="board-suggestions"
                 placeholder="Search boards by title..."
                 className="w-full bg-dark-600 text-white rounded-lg px-3 py-2 text-sm outline-none border border-dark-600 focus:border-limeyellow-500 transition-colors"
               />
-
-              {showBoardSuggestions && boardSuggestions.length > 0 && (
-                <div
-                  className="absolute mt-2 w-full bg-dark-600 border border-dark-500 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10"
-                  role="listbox"
-                  tabIndex={0}
-                  aria-label="Board suggestions"
-                >
-                  {boardSuggestions.map((b) => (
-                    <div
-                      key={b.id}
-                      role="option"
-                      tabIndex={0}
-                      onClick={() => handleSelectBoard(b)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') handleSelectBoard(b);
-                      }}
-                      className="px-3 py-2 text-sm text-white hover:bg-dark-700 cursor-pointer transition-colors"
-                    >
-                      {b.title}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <datalist id="board-suggestions">
+                {boardSuggestions.map((b) => (
+                  <option key={b.id} value={b.title} />
+                ))}
+              </datalist>
             </div>
 
             {/* Selected boards */}
@@ -410,7 +415,10 @@ const AgentModal: React.FC<AgentModalProps> = ({
             )}
 
             <div className="relative">
-              <label htmlFor="list-search" className="block text-sm text-text-secondary mb-1 font-medium">
+              <label
+                htmlFor="list-search"
+                className="block text-sm text-text-secondary mb-1 font-medium"
+              >
                 Assign Lists
               </label>
               <input
@@ -430,27 +438,24 @@ const AgentModal: React.FC<AgentModalProps> = ({
               />
 
               {showListSuggestions && listSuggestions.length > 0 && (
-                <div
-                  className="absolute mt-2 w-full bg-dark-600 border border-dark-500 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10"
-                  role="listbox"
-                  tabIndex={0}
-                  aria-label="List suggestions"
+                <select
+                  size={Math.min(listSuggestions.length, 6)}
+                  className="absolute mt-2 w-full bg-dark-600 border border-dark-500 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10 text-white text-sm"
+                  onChange={(e) => {
+                    const selectedId = e.target.value;
+                    const selectedList = listSuggestions.find(
+                      (l) => l.id === selectedId
+                    );
+                    if (selectedList) handleSelectList(selectedList);
+                  }}
+                  style={{ cursor: "pointer" }}
                 >
                   {listSuggestions.map((l) => (
-                    <div
-                      key={l.id}
-                      role="option"
-                      tabIndex={0}
-                      onClick={() => handleSelectList(l)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') handleSelectList(l);
-                      }}
-                      className="px-3 py-2 text-sm text-white hover:bg-dark-700 cursor-pointer transition-colors"
-                    >
+                    <option key={l.id} value={l.id}>
                       {l.title}
-                    </div>
+                    </option>
                   ))}
-                </div>
+                </select>
               )}
             </div>
 
@@ -496,7 +501,7 @@ const AgentModal: React.FC<AgentModalProps> = ({
                 disabled={loading || !isFormValid()}
                 className="px-4 py-2 bg-limeyellow-500 hover:bg-limeyellow-600 text-dark-900 font-semibold rounded-lg text-sm disabled:opacity-50 transition-colors"
               >
-                {loading ? "Saving..." : isEditing ? "Update" : "Create"}
+                {getButtonLabel()}
               </button>
             </div>
           </form>
