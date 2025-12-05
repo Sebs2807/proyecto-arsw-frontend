@@ -1015,116 +1015,6 @@ const Board: React.FC = () => {
     );
   })();
 
-  // --- Helper for drag start to reduce nesting ---
-  const handleDragStart = (start: any) => {
-    apiService.socket?.emit("card:dragStart", {
-      boardId: selectedBoard?.id,
-      cardId: start.draggableId,
-      user: user?.email ?? "anonymous@example.com",
-    });
-
-    const handleMouseMove = (e: MouseEvent) => {
-      apiService.socket?.emit("card:dragUpdate", {
-        boardId: selectedBoard?.id,
-        cardId: start.draggableId,
-        x: e.clientX,
-        y: e.clientY,
-        user: user?.email ?? "anonymous@example.com",
-      });
-    };
-
-    const handleMouseUp = () => {
-      globalThis.window?.removeEventListener("mousemove", handleMouseMove);
-    };
-
-    globalThis.window?.addEventListener("mousemove", handleMouseMove);
-    globalThis.window?.addEventListener("mouseup", handleMouseUp, {
-      once: true,
-    });
-  };
-
-  const handleDragUpdate = (update: any) => {
-    if (!update.destination) return;
-
-    apiService.socket?.emit("card:dragUpdate", {
-      boardId: selectedBoard?.id,
-      cardId: update.draggableId,
-      destListId: update.destination.droppableId,
-      destIndex: update.destination.index,
-      user: user?.email ?? "anonymous@example.com",
-    });
-  };
-
-  // --- Calendar scheduling helpers to reduce nesting ---
-  const handleCreateCalendarInvitation = async () => {
-    try {
-      const start = new Date(scheduleDateTime);
-      const end = new Date(
-        start.getTime() + scheduleDurationMinutes * 60 * 1000
-      );
-      const attendees = scheduleAttendees
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      await createCalendarEvent({
-        title: modalTitle || "Llamada",
-        description: modalDescription,
-        start,
-        end,
-        attendees,
-      });
-    } catch (err) {
-      console.error("Error creando invitación:", err);
-      alert("Error creando invitación. Revisa la consola.");
-    }
-  };
-
-  const handleJoinOrCreateCall = async () => {
-    if (!scheduleRoomId) return;
-    try {
-      if (!hasActiveCall) {
-        const start = new Date(scheduleDateTime);
-        const end = new Date(
-          start.getTime() + scheduleDurationMinutes * 60 * 1000
-        );
-        const attendees = scheduleAttendees
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        await createCalendarEvent({
-          title: modalTitle || "Llamada",
-          description: modalDescription,
-          start,
-          end,
-          attendees,
-        });
-      }
-      await handleLiveKit(scheduleRoomId, user?.email || "");
-    } catch (err) {
-      console.error("Error al procesar la llamada:", err);
-      alert("Error al procesar la llamada. Revisa la consola.");
-    }
-  };
-
-  const handleCloseScheduleModal = () => {
-    if (scheduledLinks?.icsUrl) {
-      try {
-        URL.revokeObjectURL(scheduledLinks.icsUrl);
-      } catch (err) {
-        console.error("Error revocando URL:", err);
-      }
-    }
-    setIsScheduleModalOpen(false);
-    setScheduledLinks(null);
-    setScheduleRoomId(null);
-    setIsJoiningCall(false);
-  };
-
-  const handleCreateListClick = async () => {
-    await handleCreateList();
-    setIsAddingList(false);
-  };
-
   // --- Renderizado ---
   if (error) return <p className="text-center text-text-error">{error}</p>;
   if (!selectedBoard)
@@ -1144,8 +1034,48 @@ const Board: React.FC = () => {
 
       {/* Kanban Board Layout */}
       <DragDropContext
-        onDragStart={handleDragStart}
-        onDragUpdate={handleDragUpdate}
+        onDragStart={(start) => {
+          apiService.socket?.emit("card:dragStart", {
+            boardId: selectedBoard?.id,
+            cardId: start.draggableId,
+            user: user?.email ?? "anonymous@example.com",
+          });
+
+          // Agregar listener de mousemove para notificar 'dragUpdate' (del primer bloque)
+          const handleMouseMove = (e: MouseEvent) => {
+            apiService.socket?.emit("card:dragUpdate", {
+              boardId: selectedBoard?.id,
+              cardId: start.draggableId,
+              x: e.clientX,
+              y: e.clientY,
+              user: user?.email ?? "anonymous@example.com",
+            });
+          };
+
+          globalThis.window?.addEventListener("mousemove", handleMouseMove);
+
+          globalThis.window?.addEventListener(
+            "mouseup",
+            () => {
+              globalThis.window?.removeEventListener(
+                "mousemove",
+                handleMouseMove
+              );
+            },
+            { once: true }
+          );
+        }}
+        onDragUpdate={(update) => {
+          if (!update.destination) return;
+
+          apiService.socket?.emit("card:dragUpdate", {
+            boardId: selectedBoard?.id,
+            cardId: update.draggableId,
+            destListId: update.destination.droppableId,
+            destIndex: update.destination.index,
+            user: user?.email ?? "anonymous@example.com",
+          });
+        }}
         onDragEnd={handleDragEnd}
       >
         <div className="flex-1 overflow-hidden">
@@ -1272,7 +1202,10 @@ const Board: React.FC = () => {
                   />
                   <div className="flex gap-2">
                     <button
-                      onClick={handleCreateListClick}
+                      onClick={async () => {
+                        await handleCreateList();
+                        setIsAddingList(false);
+                      }}
                       className="px-3 py-1 bg-limeyellow-500 text-white rounded-lg text-sm"
                     >
                       Crear lista
@@ -1422,7 +1355,19 @@ const Board: React.FC = () => {
       {/* Modal de Programación/Unión de Llamada (combinado) */}
       <ModalBase
         isOpen={isScheduleModalOpen}
-        onClose={handleCloseScheduleModal}
+        onClose={() => {
+          if (scheduledLinks?.icsUrl) {
+            try {
+              URL.revokeObjectURL(scheduledLinks.icsUrl);
+            } catch (err) {
+              console.error("Error revocando URL:", err);
+            }
+          }
+          setIsScheduleModalOpen(false);
+          setScheduledLinks(null);
+          setScheduleRoomId(null);
+          setIsJoiningCall(false);
+        }}
         title={"Agendar/Iniciar Llamada"}
         width="max-w-lg"
       >
@@ -1486,7 +1431,28 @@ const Board: React.FC = () => {
 
           <div className="flex gap-2 justify-end">
             <button
-              onClick={handleCreateCalendarInvitation}
+              onClick={async () => {
+                try {
+                  const start = new Date(scheduleDateTime);
+                  const end = new Date(
+                    start.getTime() + scheduleDurationMinutes * 60 * 1000
+                  );
+                  const attendees = scheduleAttendees
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  await createCalendarEvent({
+                    title: modalTitle || "Llamada",
+                    description: modalDescription,
+                    start,
+                    end,
+                    attendees,
+                  });
+                } catch (err) {
+                  console.error("Error creando invitación:", err);
+                  alert("Error creando invitación. Revisa la consola.");
+                }
+              }}
               disabled={isScheduling || isJoiningCall}
               className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-limeyellow-500 text-white rounded-lg"
             >
@@ -1501,7 +1467,32 @@ const Board: React.FC = () => {
             </button>
 
             <button
-              onClick={handleJoinOrCreateCall}
+              onClick={async () => {
+                if (!scheduleRoomId) return;
+                try {
+                  if (!hasActiveCall) {
+                    const start = new Date(scheduleDateTime);
+                    const end = new Date(
+                      start.getTime() + scheduleDurationMinutes * 60 * 1000
+                    );
+                    const attendees = scheduleAttendees
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean);
+                    await createCalendarEvent({
+                      title: modalTitle || "Llamada",
+                      description: modalDescription,
+                      start,
+                      end,
+                      attendees,
+                    });
+                  }
+                  await handleLiveKit(scheduleRoomId, user?.email || "");
+                } catch (err) {
+                  console.error("Error al procesar la llamada:", err);
+                  alert("Error al procesar la llamada. Revisa la consola.");
+                }
+              }}
               disabled={isScheduling || isJoiningCall}
               className="inline-flex items-center gap-2 whitespace-nowrap px-3 py-1 bg-dark-600 text-text-primary rounded-lg"
             >
@@ -1509,7 +1500,19 @@ const Board: React.FC = () => {
             </button>
 
             <button
-              onClick={handleCloseScheduleModal}
+              onClick={() => {
+                if (scheduledLinks?.icsUrl) {
+                  try {
+                    URL.revokeObjectURL(scheduledLinks.icsUrl);
+                  } catch (err) {
+                    console.error("Error revocando URL:", err);
+                  }
+                }
+                setIsScheduleModalOpen(false);
+                setScheduledLinks(null);
+                setScheduleRoomId(null);
+                setIsJoiningCall(false);
+              }}
               className="px-3 py-1 bg-dark-900 text-text-muted rounded-lg"
             >
               Cerrar
@@ -1546,6 +1549,7 @@ const Board: React.FC = () => {
                         setCopied(true);
                         setTimeout(() => setCopied(false), 2000);
                       } catch (e) {
+                        // If clipboard API fails, inform the user
                         console.error("Failed to copy to clipboard:", e);
                         alert("No se pudo copiar al portapapeles. Por favor, copia el enlace manualmente.");
                       }

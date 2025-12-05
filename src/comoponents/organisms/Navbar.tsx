@@ -11,9 +11,12 @@ interface NavbarProps {
 
 const Navbar: React.FC<NavbarProps> = ({ onCreateWorkspace }) => {
   const dispatch = useDispatch<AppDispatch>();
+
+
   const workspaces = useSelector(
     (state: RootState) => state.workspace.workspaces
   );
+
   const selectedWorkspace = useSelector(
     (state: RootState) => state.workspace.selectedWorkspace
   );

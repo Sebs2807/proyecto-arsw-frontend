@@ -138,28 +138,15 @@ const BoardsManager: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const renderMembers = (members: UserDto[]) => {
-    return members.map((m) => (
-      <span
-        key={m.id}
-        className="inline-block bg-dark-600 text-text-primary text-xs px-2 py-1 mr-1 rounded"
-      >
-        {m.firstName} {m.lastName}
-      </span>
-    ));
-  };
-
-
   const fetchData = useCallback(async () => {
     if (!activeWorkspaceId) return;
     const abortController = new AbortController();
     try {
       setLoading(true);
-      let query = `${
-        CONFIG.endpoint
-      }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
-        activeWorkspaceId
-      )}`;
+      let query = `${CONFIG.endpoint
+        }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
+          activeWorkspaceId
+        )}`;
       if (searchTerm.trim())
         query += `&search=${encodeURIComponent(searchTerm)}`;
       const response = await apiService.get<PaginatedResponse<Board>>(query, {
@@ -325,9 +312,8 @@ const BoardsManager: React.FC = () => {
                           onClick={() =>
                             setExpandedRow(expandedRow === i ? null : i)
                           }
-                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${
-                            i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
-                          }`}
+                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
+                            }`}
                         >
                           {headers.map((key) =>
                             key === "actions" ? (
@@ -353,8 +339,8 @@ const BoardsManager: React.FC = () => {
                                   </button>
                                 </div>
                               </td>
-                    
-                              ) : (() => {
+
+                            ) : (() => {
                               let content;
 
                               if (key === "color") {
@@ -367,7 +353,7 @@ const BoardsManager: React.FC = () => {
                                   </div>
                                 );
                               } else if (key === "members") {
-                                content = renderMembers(row.members);
+                                return null
                               } else {
                                 content = row[key] || "-";
                               }
@@ -378,7 +364,7 @@ const BoardsManager: React.FC = () => {
                                 </td>
                               );
                             })()
-                        )}
+                          )}
                         </tr>
                       </Fragment>
                     ))
@@ -389,14 +375,14 @@ const BoardsManager: React.FC = () => {
 
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
-              <span className="text-xs text-text-secondary">
-                Showing{" "}
-                <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>
-                {" "}–{" "}
-                <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>
-                {" "}of{" "}
-                <strong>{totalItems}</strong>
-              </span>
+                <span className="text-xs text-text-secondary">
+                  Showing{" "}
+                  <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>
+                  {" "}–{" "}
+                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>
+                  {" "}of{" "}
+                  <strong>{totalItems}</strong>
+                </span>
 
                 <div className="flex items-center gap-1">
                   <button
@@ -410,11 +396,10 @@ const BoardsManager: React.FC = () => {
                     <button
                       key={p}
                       onClick={() => setPage(p)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                        p === page
-                          ? "bg-limeyellow-500 text-dark-900"
-                          : "text-text-secondary hover:bg-dark-700"
-                      }`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${p === page
+                        ? "bg-limeyellow-500 text-dark-900"
+                        : "text-text-secondary hover:bg-dark-700"
+                        }`}
                       disabled={loading}
                     >
                       {p}

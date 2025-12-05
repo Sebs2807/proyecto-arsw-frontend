@@ -22,12 +22,12 @@ interface Knowledge {
   title: string;
   text: string;
   category:
-    | "product_feature"
-    | "pricing"
-    | "objection"
-    | "flow_step"
-    | "legal"
-    | "faq";
+  | "product_feature"
+  | "pricing"
+  | "objection"
+  | "flow_step"
+  | "legal"
+  | "faq";
   createdAt: string;
   updatedAt: string;
 }
@@ -39,19 +39,19 @@ interface KnowledgeRaw {
     text: string;
     label?: string;
     category:
-      | "product_feature"
-      | "pricing"
-      | "objection"
-      | "flow_step"
-      | "legal"
-      | "faq";
+    | "product_feature"
+    | "pricing"
+    | "objection"
+    | "flow_step"
+    | "legal"
+    | "faq";
     metadata?: Record<string, any>;
   };
   createdAt?: string;
   updatedAt?: string;
 }
 
-interface TransformedRow extends Knowledge {}
+interface TransformedRow extends Knowledge { }
 
 interface PaginatedResponse<T> {
   points: T[];
@@ -146,11 +146,10 @@ const KnowledgeManager: React.FC = () => {
     const abortController = new AbortController();
     try {
       setLoading(true);
-      let query = `${
-        CONFIG.endpoint
-      }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
-        activeWorkspaceId
-      )}`;
+      let query = `${CONFIG.endpoint
+        }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
+          activeWorkspaceId
+        )}`;
       if (searchTerm.trim())
         query += `&search=${encodeURIComponent(searchTerm)}`;
 
@@ -239,9 +238,11 @@ const KnowledgeManager: React.FC = () => {
           </button>
         </div>
 
-        <div
-          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer"
+        <button
+          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer w-full text-left"
           onClick={() => setIsFiltersVisible((v) => !v)}
+          aria-expanded={isFiltersVisible}
+          aria-label="Toggle filters visibility"
         >
           <h2 className="text-sm font-semibold text-text-primary">
             Filters{" "}
@@ -256,22 +257,23 @@ const KnowledgeManager: React.FC = () => {
               </span>
             )}
           </h2>
-          <button className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full inline-flex">
             {isFiltersVisible ? (
               <ChevronUpIcon className="w-4 h-4" />
             ) : (
               <ChevronDownIcon className="w-4 h-4" />
             )}
-          </button>
-        </div>
+          </span>
+        </button>
 
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex flex-col w-full sm:w-48">
-              <label className="text-xs text-text-secondary font-medium mb-1">
+              <label htmlFor="knowledge-search" className="text-xs text-text-secondary font-medium mb-1">
                 General Search
               </label>
               <input
+                id="knowledge-search"
                 value={tempSearchTerm}
                 onChange={(e) => setTempSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
@@ -330,9 +332,8 @@ const KnowledgeManager: React.FC = () => {
                     data.map((row, i) => (
                       <Fragment key={row.id || i}>
                         <tr
-                          className={`border-b border-dark-700 hover:bg-dark-800 ${
-                            i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
-                          }`}
+                          className={`border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
+                            }`}
                         >
                           {headers.map((key) =>
                             key === "actions" ? (
@@ -376,7 +377,7 @@ const KnowledgeManager: React.FC = () => {
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>–
+                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>–{" "}
                   <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>{" "}
                   of <strong>{totalItems}</strong>
                 </span>
@@ -392,11 +393,10 @@ const KnowledgeManager: React.FC = () => {
                     <button
                       key={p}
                       onClick={() => setPage(p)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                        p === page
-                          ? "bg-limeyellow-500 text-dark-900"
-                          : "text-text-secondary hover:bg-dark-700"
-                      }`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${p === page
+                        ? "bg-limeyellow-500 text-dark-900"
+                        : "text-text-secondary hover:bg-dark-700"
+                        }`}
                       disabled={loading}
                     >
                       {p}
