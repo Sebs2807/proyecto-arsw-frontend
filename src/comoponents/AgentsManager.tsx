@@ -34,7 +34,7 @@ export interface Agent {
   id: string;
   name: string;
   flowConfig: any;
-  workspaceId: string; // ✅ Backend devuelve workspaceId, no workspace
+  workspaceId: string;
   temperature: number;
   maxTokens: number;
   boards: Board[];
@@ -365,9 +365,8 @@ const AgentsManager: React.FC = () => {
                           }}
                           tabIndex={0}
                           role="button"
-                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${
-                            i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
-                          }`}
+                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
+                            }`}
                         >
                           {headers.map((key) =>
                             key === "actions" ? (
@@ -429,11 +428,10 @@ const AgentsManager: React.FC = () => {
                     <button
                       key={p}
                       onClick={() => setPage(p)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
-                        p === page
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${p === page
                           ? "bg-limeyellow-500 text-dark-900"
                           : "text-text-secondary hover:bg-dark-700"
-                      }`}
+                        }`}
                       disabled={loading}
                     >
                       {p}

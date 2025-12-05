@@ -60,7 +60,7 @@ const AgentModal: React.FC<AgentModalProps> = ({
   const [searchBoards, setSearchBoards] = useState("");
   const [boardSuggestions, setBoardSuggestions] = useState<Board[]>([]);
   const [selectedBoards, setSelectedBoards] = useState<Board[]>([]);
-  const [showBoardSuggestions, setShowBoardSuggestions] = useState(false);
+  // Removed unused showBoardSuggestions state
 
   const [searchLists, setSearchLists] = useState("");
   const [listSuggestions, setListSuggestions] = useState<List[]>([]);
@@ -189,13 +189,6 @@ const AgentModal: React.FC<AgentModalProps> = ({
     }
   };
 
-  const handleSelectBoard = (board: Board) => {
-    setSelectedBoards((prev) => [...prev, board]);
-    setSearchBoards("");
-    setBoardSuggestions([]);
-    setShowBoardSuggestions(false);
-  };
-
   const removeBoard = (id: string) => {
     setSelectedBoards((prev) => prev.filter((b) => b.id !== id));
   };
@@ -246,12 +239,10 @@ const AgentModal: React.FC<AgentModalProps> = ({
         {isDeleting ? (
           <>
             <p className="text-text-secondary text-sm">
-              Are you sure you want to delete the agent
+              Are you sure you want to delete the agent{" "}
               <span className="text-limeyellow-500 font-semibold">
-                {" "}
-                {agent?.name}
+                {agent?.name}?
               </span>
-              ?
             </p>
 
             <div className="flex justify-end gap-2 mt-5">

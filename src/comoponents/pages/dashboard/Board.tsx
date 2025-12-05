@@ -97,10 +97,9 @@ const renderDraggableCard = ({
       type="button"
       onClick={handleClick}
       className={`relative text-left w-full p-3 rounded-lg border text-sm transition-all duration-300
-        ${
-          snapshot.isDragging
-            ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
-            : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
+        ${snapshot.isDragging
+          ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
+          : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
         }
         ${isBeingDraggedByAnother ? "opacity-50 cursor-not-allowed" : ""}`}
     >
@@ -152,24 +151,24 @@ const draggableRenderer =
     setModalIndustry,
     setModalPriority,
   }: any) =>
-  (provided: any, snapshot: any) =>
-    renderDraggableCard({
-      task,
-      user,
-      provided,
-      snapshot,
-      draggingCards,
-      draggingNames,
-      activeCalls,
-      setEditingTask,
-      setModalTitle,
-      setModalDescription,
-      setModalContactName,
-      setModalContactEmail,
-      setModalContactPhone,
-      setModalIndustry,
-      setModalPriority,
-    });
+    (provided: any, snapshot: any) =>
+      renderDraggableCard({
+        task,
+        user,
+        provided,
+        snapshot,
+        draggingCards,
+        draggingNames,
+        activeCalls,
+        setEditingTask,
+        setModalTitle,
+        setModalDescription,
+        setModalContactName,
+        setModalContactEmail,
+        setModalContactPhone,
+        setModalIndustry,
+        setModalPriority,
+      });
 
 // --- Componente Principal Board ---
 
@@ -607,14 +606,12 @@ const Board: React.FC = () => {
       // El segundo bloque usa PUT, el primero PATCH/PUT. Usamos PATCH para actualizar solo listId.
       await apiService.patch(`/v1/cards/${draggableId}`, {
         listId: destination.droppableId,
-        sourceListId: source.droppableId, // Enviamos el source list también
+        sourceListId: source.droppableId,
       });
     } catch (err) {
       console.error("Error al mover la tarea:", err);
-      // Opcional: Revertir el estado (handle error)
     }
 
-    // Notificación de fin de arrastre para limpiar el estado 'draggingCards' en otros clientes
     apiService.socket?.emit("card:dragEnd", {
       boardId: selectedBoard?.id,
       cardId: draggableId,
@@ -893,10 +890,8 @@ const Board: React.FC = () => {
     setIsCreating(true);
     try {
       await apiService.post<Task>("/v1/cards", {
-        cardData: {
-          title: newTaskTitle,
-          description: newTaskDescription || "Sin descripción",
-        },
+        title: newTaskTitle,
+        description: newTaskDescription || "Sin descripción",
         listId,
       });
       setNewTaskTitle("");
@@ -938,9 +933,9 @@ const Board: React.FC = () => {
     cards: list.cards.map((c) =>
       c.id === cardId
         ? {
-            ...c,
-            ...updatedCard,
-          }
+          ...c,
+          ...updatedCard,
+        }
         : c
     ),
   });
@@ -960,24 +955,31 @@ const Board: React.FC = () => {
     const editingId = editingTask.id;
 
     try {
-      const rawPayload = {
-        title: modalTitle,
-        description: modalDescription,
-        contactName: modalContactName,
-        contactEmail: modalContactEmail,
-        contactPhone: modalContactPhone,
-        industry: modalIndustry,
-        priority: modalPriority,
+      const payload: Partial<Task> = {
+        title: modalTitle.trim(),
+        description: modalDescription.trim(),
+        contactName: modalContactName.trim(),
+        contactEmail: modalContactEmail.trim() || undefined,
+        contactPhone: modalContactPhone.trim(),
+        industry: modalIndustry.trim(),
+        priority: (modalPriority.trim() || undefined) as any,
       };
-      // Filtra campos vacíos/nulos/undefined
-      const payload = Object.fromEntries(
-        Object.entries(rawPayload).filter(
-          ([, v]) => v !== "" && v !== undefined && v !== null
-        )
-      ) as Partial<Task>;
+
+      // Eliminar claves undefined
+      Object.keys(payload).forEach((key) => {
+        if (payload[key as keyof Task] === undefined) {
+          delete payload[key as keyof Task];
+        }
+      });
+
+      if (!payload.title && editingTask.title) {
+        alert("El título de la tarea no puede estar vacío.");
+        setIsSaving(false);
+        return;
+      }
 
       const resp = await apiService.patch(`/v1/cards/${editingId}`, payload);
-      const updated = resp && (resp as any).data ? (resp as any).data : payload; // Usa la respuesta si es completa, sino usa el payload
+      const updated = resp && (resp as any).data ? (resp as any).data : payload;
 
       applyCardUpdate(editingId, updated);
       setEditingTask(null);
