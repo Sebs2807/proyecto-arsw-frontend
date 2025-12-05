@@ -105,6 +105,8 @@ const BoardsManager: React.FC = () => {
     []
   );
 
+  // --- HANDLERS (Colocados antes de su uso) ---
+
   const handleApplyFilters = useCallback(() => {
     setSearchTerm(tempSearchTerm);
     setPage(1);
@@ -137,6 +139,7 @@ const BoardsManager: React.FC = () => {
     setModalBoard(board);
     setIsModalOpen(true);
   };
+  // ---------------------------------------------
 
   const fetchData = useCallback(async () => {
     if (!activeWorkspaceId) return;
@@ -322,7 +325,7 @@ const BoardsManager: React.FC = () => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleEdit(row);
+                                      handleEdit(row); // 👈 Referencia correcta a handleEdit
                                     }}
                                     className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"
                                   >
@@ -331,7 +334,7 @@ const BoardsManager: React.FC = () => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleDelete(row);
+                                      handleDelete(row); // 👈 Referencia correcta a handleDelete
                                     }}
                                     className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"
                                   >
