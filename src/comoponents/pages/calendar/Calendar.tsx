@@ -16,76 +16,113 @@ interface CalendarEvent {
   color?: string;
 }
 
+interface CalendarEventItemProps {
+  event: CalendarEvent;
+  onClick: (ev: CalendarEvent) => void;
+}
+
+const CalendarEventItem: React.FC<CalendarEventItemProps> = ({ event, onClick }) => (
+  <button
+    onClick={() => onClick(event)}
+    className={`text-xs text-left w-full font-medium rounded px-1 py-0.5 shadow-md truncate text-dark-900 ${event.color || "bg-limeyellow-400"
+      }`}
+    title={event.title}
+  >
+    {event.title}
+  </button>
+);
+
+import ModalBase from "../../atoms/ModalBase";
+
+const parseDate = (d: any): Date | null => {
+  if (!d) return null;
+  if (typeof d === "string") {
+    const dt = new Date(d);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  if (d.dateTime) {
+    const dt = new Date(d.dateTime);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  if (d.date) {
+    const dt = new Date(d.date);
+    return Number.isNaN(dt.getTime()) ? null : dt;
+  }
+  return null;
+};
+
+const fetchEventsForWeek = async (start: Date, end: Date): Promise<CalendarEvent[]> => {
+  try {
+    const params = new URLSearchParams({
+      start: start.toISOString(),
+      end: end.toISOString(),
+    });
+    const relativeUrl = `/v1/calendar/google-events?${params.toString()}`;
+
+    const data = await apiService.get<any>(relativeUrl);
+    const apiEvents: any[] = data?.events || data?.items || data || [];
+
+    const mapped: CalendarEvent[] = (apiEvents || [])
+      .map((ev: any, idx: number) => {
+        const id = ev.id || ev.eventId || `evt-${idx}`;
+        const title = ev.summary || ev.title || ev.name || "Sin título";
+
+        const start = parseDate(
+          ev.start || ev.startDate || ev.start_time || ev.startDateTime
+        );
+        const end =
+          parseDate(
+            ev.end || ev.endDate || ev.end_time || ev.endDateTime
+          ) ||
+          (start
+            ? new Date(start.getTime() + 60 * 60 * 1000)
+            : null);
+
+        const color =
+          ev.color || (ev.colorId ? `color-${ev.colorId}` : undefined);
+
+        if (!start || !end) return null;
+
+        return { id, title, start, end, color };
+      })
+      .filter(Boolean) as CalendarEvent[];
+
+    return mapped;
+  } catch (error) {
+    console.error("Error fetching weekly events:", error);
+    return [];
+  }
+};
+
 const WeeklyCalendar: React.FC = () => {
   const [currentWeek, setCurrentWeek] = React.useState<Date>(new Date());
   const [events, setEvents] = React.useState<CalendarEvent[]>([]);
+  const [selectedEvent, setSelectedEvent] = React.useState<CalendarEvent | null>(null);
+  const [modalOpen, setModalOpen] = React.useState(false);
+  const [actionLoading, setActionLoading] = React.useState(false);
+  const [newStartLocal, setNewStartLocal] = React.useState<string>("");
+  const [newEndLocal, setNewEndLocal] = React.useState<string>("");
+  const [newTitle, setNewTitle] = React.useState<string>("");
   const cacheRef = React.useRef<Record<string, CalendarEvent[]>>({});
+  // Local overrides for fields the backend may not accept/update (e.g. title)
+  const editsRef = React.useRef<Record<string, Partial<CalendarEvent>>>({});
 
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 0 });
   const weekEnd = addDays(weekStart, 7);
   const daysOfWeek = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
-  const fetchEventsForWeek = async (start: Date, end: Date): Promise<CalendarEvent[]> => {
-    try {
-      const params = new URLSearchParams({
-        start: start.toISOString(),
-        end: end.toISOString(),
-      });
-      const relativeUrl = `/v1/calendar/google-events?${params.toString()}`;
 
-      const data = await apiService.get<any>(relativeUrl);
-      const apiEvents: any[] = data?.events || data?.items || data || [];
-
-      const parseDate = (d: any): Date | null => {
-        if (!d) return null;
-        if (typeof d === "string") {
-          const dt = new Date(d);
-          return isNaN(dt.getTime()) ? null : dt;
-        }
-        if (d.dateTime) {
-          const dt = new Date(d.dateTime);
-          return isNaN(dt.getTime()) ? null : dt;
-        }
-        if (d.date) {
-          const dt = new Date(d.date);
-          return isNaN(dt.getTime()) ? null : dt;
-        }
-        return null;
-      };
-
-      const mapped: CalendarEvent[] = (apiEvents || [])
-        .map((ev: any, idx: number) => {
-          const id = ev.id || ev.eventId || `evt-${idx}`;
-          const title = ev.summary || ev.title || ev.name || "Sin título";
-
-          const start = parseDate(
-            ev.start || ev.startDate || ev.start_time || ev.startDateTime
-          );
-          const end =
-            parseDate(
-              ev.end || ev.endDate || ev.end_time || ev.endDateTime
-            ) ||
-            (start
-              ? new Date(start.getTime() + 60 * 60 * 1000)
-              : null);
-
-          const color =
-            ev.color || (ev.colorId ? `color-${ev.colorId}` : undefined);
-
-          if (!start || !end) return null;
-
-          return { id, title, start, end, color };
-        })
-        .filter(Boolean) as CalendarEvent[];
-
-      return mapped;
-    } catch (error) {
-      console.error("Error fetching weekly events:", error);
-      return [];
-    }
-  };
 
   const getWeekKey = (d: Date) => startOfWeek(d, { weekStartsOn: 0 }).toISOString();
+
+  const invalidateWeekCache = (d: Date) => {
+    try {
+      const key = getWeekKey(d);
+      if (cacheRef.current[key]) delete cacheRef.current[key];
+    } catch (e) {
+      console.warn('Failed to invalidate week cache', e);
+    }
+  };
 
   const prefetchWeek = async (weekStartDate: Date) => {
     const key = getWeekKey(weekStartDate);
@@ -100,12 +137,136 @@ const WeeklyCalendar: React.FC = () => {
     }
   };
 
+  const toDatetimeLocalValue = (d: Date) => {
+    const tzOffset = d.getTimezoneOffset();
+    const local = new Date(d.getTime() - tzOffset * 60000);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const handleEventClick = (ev: CalendarEvent) => {
+    setSelectedEvent(ev);
+    setNewStartLocal(toDatetimeLocalValue(ev.start));
+    setNewEndLocal(toDatetimeLocalValue(ev.end));
+    setNewTitle(ev.title || "");
+    // description removed from UI
+    setModalOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!selectedEvent) return;
+    setActionLoading(true);
+    try {
+      console.log("Deleting event id:", selectedEvent.id);
+      const deletedId = selectedEvent.id;
+      // Use apiService (axios) so baseURL and withCredentials are respected
+      const result = await apiService.delete(`/v1/calendar/google-events/${deletedId}`);
+      console.log("Delete result:", result);
+
+      // Resultado esperado del backend: { ok: true } o similar
+      setModalOpen(false);
+      setSelectedEvent(null);
+
+      // Update local state immediately so UI reflects deletion without waiting
+      setEvents((prev) => prev.filter((e) => e.id !== deletedId));
+
+      // Remove any local overrides for the deleted event
+      delete editsRef.current[deletedId];
+
+      // Invalidate cache for the current week so loadWeek will refetch
+      invalidateWeekCache(currentWeek);
+      await loadWeek(currentWeek);
+      try {
+        globalThis.dispatchEvent(new CustomEvent('calendar:updated'));
+      } catch (e) {
+        console.warn('Failed to dispatch calendar:updated event', e);
+      }
+    } catch (err) {
+      console.error("Error deleting event:", err);
+      // Mostrar mensaje más descriptivo
+      // Si es un error de autorización probablemente sea 401/403: informar al usuario
+      if ((err as any)?.response?.status === 401) {
+        alert("No autorizado. Por favor inicia sesión de nuevo.");
+      } else if ((err as any)?.response?.status === 403) {
+        alert("Acceso denegado para eliminar este evento.");
+      } else {
+        alert("No se pudo eliminar el evento. Revisa la consola para más detalles.");
+      }
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleReschedule = async () => {
+    if (!selectedEvent) return;
+    if (!newStartLocal || !newEndLocal) {
+      alert("Por favor selecciona fecha y hora de inicio y fin");
+      return;
+    }
+
+    setActionLoading(true);
+    try {
+      const isoStart = new Date(newStartLocal).toISOString();
+      const isoEnd = new Date(newEndLocal).toISOString();
+
+      // The backend RescheduleEventDto expects top-level startDateTime/endDateTime
+      const payload: any = {
+        startDateTime: isoStart,
+        endDateTime: isoEnd,
+      };
+
+      // Note: the current backend controller shown only uses these fields
+      // to reschedule. If you need to update title/description, the
+      // backend must accept those fields (or provide a separate endpoint).
+      await apiService.patch(`/v1/calendar/google-events/${selectedEvent.id}`, payload);
+      // Optimistically update local event so UI updates immediately
+      const updatedId = selectedEvent.id;
+      setEvents((prev) =>
+        prev.map((ev) =>
+          ev.id === updatedId
+            ? { ...ev, start: new Date(isoStart), end: new Date(isoEnd), title: newTitle || ev.title }
+            : ev
+        )
+      );
+
+      // If the user changed the title locally, keep it as an override
+      try {
+        if (newTitle?.trim() && newTitle !== selectedEvent.title) {
+          editsRef.current[updatedId] = { title: newTitle };
+        }
+      } catch (e) {
+        console.warn('Failed to update local edits', e);
+      }
+
+      setModalOpen(false);
+      setSelectedEvent(null);
+      // Invalidate cache for the current week so loadWeek will refetch updated data
+      invalidateWeekCache(currentWeek);
+      await loadWeek(currentWeek);
+      try {
+        globalThis.dispatchEvent(new CustomEvent('calendar:updated'));
+      } catch (e) {
+        console.warn('Failed to dispatch calendar:updated event', e);
+      }
+    } catch (err) {
+      console.error("Error rescheduling event:", err);
+      alert("No se pudo reagendar el evento");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const loadWeek = async (anyDateInWeek: Date) => {
     const weekStart = startOfWeek(anyDateInWeek, { weekStartsOn: 0 });
     const key = weekStart.toISOString();
 
     if (cacheRef.current[key]) {
-      setEvents(cacheRef.current[key]);
+      // Apply any local overrides to cached events
+      const cached = cacheRef.current[key];
+      const mergedCached = cached.map((ev) => {
+        const o = editsRef.current[ev.id];
+        return o ? { ...ev, ...o } : ev;
+      });
+      setEvents(mergedCached);
       prefetchWeek(addDays(weekStart, -7));
       prefetchWeek(addDays(weekStart, 7));
       return;
@@ -115,7 +276,12 @@ const WeeklyCalendar: React.FC = () => {
     const end = addDays(start, 7);
     const mapped = await fetchEventsForWeek(start, end);
     cacheRef.current[key] = mapped;
-    setEvents(mapped);
+    // Apply any local overrides stored for events
+    const merged = mapped.map((ev) => {
+      const o = editsRef.current[ev.id];
+      return o ? { ...ev, ...o } : ev;
+    });
+    setEvents(merged);
 
     prefetchWeek(addDays(start, -7));
     prefetchWeek(addDays(start, 7));
@@ -123,6 +289,20 @@ const WeeklyCalendar: React.FC = () => {
 
   React.useEffect(() => {
     loadWeek(currentWeek);
+  }, [currentWeek]);
+
+  // Listen for global calendar updates (created/edited/deleted elsewhere)
+  React.useEffect(() => {
+    const onCalendarUpdated = async () => {
+      try {
+        await loadWeek(currentWeek);
+      } catch (e) {
+        console.warn('calendar:updated handler failed', e);
+      }
+    };
+
+    globalThis.addEventListener('calendar:updated', onCalendarUpdated as EventListener);
+    return () => globalThis.removeEventListener('calendar:updated', onCalendarUpdated as EventListener);
   }, [currentWeek]);
 
   const goToPreviousWeek = () => setCurrentWeek((prev) => addDays(prev, -7));
@@ -173,9 +353,9 @@ const WeeklyCalendar: React.FC = () => {
         <div className="bg-dark-800 border-r border-dark-600 p-2 text-text-muted text-center font-semibold">
           Hora
         </div>
-        {daysOfWeek.map((day, i) => (
+        {daysOfWeek.map((day) => (
           <div
-            key={i}
+            key={day.toISOString()}
             className="bg-dark-800 border-r border-dark-600 p-2 text-center font-semibold text-text-muted"
           >
             {format(day, "EEE dd")}
@@ -204,15 +384,11 @@ const WeeklyCalendar: React.FC = () => {
                   {eventsInSlot.length > 0 && (
                     <div className="absolute inset-1 flex flex-col gap-1 overflow-auto max-h-full">
                       {eventsInSlot.map((ev) => (
-                        <div
+                        <CalendarEventItem
                           key={ev.id}
-                          className={`text-xs font-medium rounded px-1 py-0.5 shadow-md truncate text-dark-900 ${
-                            ev.color || "bg-limeyellow-400"
-                          }`}
-                          title={ev.title}
-                        >
-                          {ev.title}
-                        </div>
+                          event={ev}
+                          onClick={handleEventClick}
+                        />
                       ))}
                     </div>
                   )}
@@ -222,6 +398,79 @@ const WeeklyCalendar: React.FC = () => {
           </React.Fragment>
         ))}
       </div>
+
+      {/* Modal para acciones sobre el evento (eliminar / reagendar) */}
+      <ModalBase
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedEvent(null);
+        }}
+        title={selectedEvent ? selectedEvent.title : "Acciones"}
+      >
+        {!selectedEvent && <p>Sin evento seleccionado</p>}
+
+        {selectedEvent && (
+          <div className="flex flex-col gap-3">
+            <div>
+              <p className="text-sm text-text-secondary">Inicio:</p>
+              <p className="text-sm">{selectedEvent.start.toString()}</p>
+            </div>
+            <div>
+              <p className="text-sm text-text-secondary">Fin:</p>
+              <p className="text-sm">{selectedEvent.end.toString()}</p>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label htmlFor="event-title" className="text-xs text-text-secondary">Título</label>
+              <input
+                id="event-title"
+                type="text"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                className="w-full bg-dark-800 border border-dark-600 px-2 py-1 rounded text-sm"
+              />
+
+
+              <label htmlFor="event-start" className="text-xs text-text-secondary">Nueva fecha/hora inicio</label>
+              <input
+                id="event-start"
+                type="datetime-local"
+                value={newStartLocal}
+                onChange={(e) => setNewStartLocal(e.target.value)}
+                className="w-full bg-dark-800 border border-dark-600 px-2 py-1 rounded text-sm"
+              />
+
+              <label htmlFor="event-end" className="text-xs text-text-secondary">Nueva fecha/hora fin</label>
+              <input
+                id="event-end"
+                type="datetime-local"
+                value={newEndLocal}
+                onChange={(e) => setNewEndLocal(e.target.value)}
+                className="w-full bg-dark-800 border border-dark-600 px-2 py-1 rounded text-sm"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                disabled={actionLoading}
+                onClick={async () => await handleReschedule()}
+                className="px-3 py-2 bg-dark-700 rounded text-sm hover:bg-dark-600 disabled:opacity-50"
+              >
+                {actionLoading ? "Guardando..." : "Guardar cambios"}
+              </button>
+
+              <button
+                disabled={actionLoading}
+                onClick={async () => await handleDelete()}
+                className="px-3 py-2 bg-red-600 rounded text-sm hover:opacity-90 disabled:opacity-50"
+              >
+                {actionLoading ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        )}
+      </ModalBase>
     </div>
   );
 };

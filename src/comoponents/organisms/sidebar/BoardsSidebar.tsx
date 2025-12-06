@@ -25,9 +25,21 @@ const COLOR_PALETTE = [
 
 const stringToColor = (s: string) => {
   let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h << 5) - h + s.charCodeAt(i);
+  for (const char of s) {
+    const code = char.codePointAt(0) ?? 0;
+    h = (h << 5) - h + code;
+  }
   const idx = Math.abs(h) % COLOR_PALETTE.length;
   return COLOR_PALETTE[idx];
+};
+
+const isNewBoard = (prevBoards: Board[], board: Board) => {
+  return !prevBoards.some((existing) => existing.id === board.id);
+};
+
+const mergeBoards = (prevBoards: Board[], newBoards: Board[]) => {
+  const uniqueNewBoards = newBoards.filter((b) => isNewBoard(prevBoards, b));
+  return [...prevBoards, ...uniqueNewBoards];
 };
 
 const LIMIT = 10;
@@ -54,7 +66,6 @@ const BoardsSidebar: React.FC = () => {
   );
   const WORKSPACE_ID = selectedWorkspace?.id;
 
-  // --- 🔍 Fetch boards con control de concurrencia ---
   const fetchBoards = useCallback(
     async (pageNumber = 1, replace = false, search = "") => {
       if (!WORKSPACE_ID || isFetchingRef.current) return;
@@ -78,14 +89,7 @@ const BoardsSidebar: React.FC = () => {
         const boardsData = response?.items ?? [];
 
         setBoards((prev) =>
-          replace
-            ? boardsData
-            : [
-                ...prev,
-                ...boardsData.filter(
-                  (b) => !prev.some((existing) => existing.id === b.id)
-                ),
-              ]
+          replace ? boardsData : mergeBoards(prev, boardsData)
         );
 
         setHasMore(boardsData.length === LIMIT);
@@ -102,14 +106,12 @@ const BoardsSidebar: React.FC = () => {
     [WORKSPACE_ID]
   );
 
-  // --- Carga inicial y búsqueda ---
   useEffect(() => {
     setInitialLoadDone(false);
     setBoards([]);
     fetchBoards(1, true, searchTerm);
   }, [fetchBoards, searchTerm]);
 
-  // --- Scroll infinito ---
   useEffect(() => {
     const sentinel = loadMoreRef.current;
     const rootEl = scrollContainerRef.current;
@@ -137,7 +139,6 @@ const BoardsSidebar: React.FC = () => {
     return () => observer.current?.disconnect();
   }, [boards, hasMore, loading, fetchBoards, searchTerm]);
 
-  // --- Manejadores de búsqueda automáticos (con debounce) ---
   const handleSearchChange = (value: string) => {
     setTempSearchTerm(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -179,7 +180,6 @@ const BoardsSidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* 🧩 Lista de tableros */}
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-hide"
@@ -194,14 +194,12 @@ const BoardsSidebar: React.FC = () => {
           />
         ))}
 
-        {/* 🔄 Cargando */}
         {loading && (
           <p className="text-sm text-text-secondary text-center animate-pulse">
             Cargando tableros...
           </p>
         )}
 
-        {/* 🚫 Sin resultados (solo si ya terminó la búsqueda) */}
         {!loading && initialLoadDone && boards.length === 0 && (
           <p className="text-sm text-text-secondary text-center mt-4">
             No se encontraron tableros.

@@ -21,13 +21,13 @@ describe("sidebarSlice", () => {
   it("debería cambiar la sección correctamente con setSection", () => {
     const newState = reducer(initialState, setSection("settings"));
     expect(newState.section).toBe("settings");
-    expect(newState.activeItem).toBe("members"); 
+    expect(newState.activeItem).toBe("");
   });
 
   it("debería cambiar el elemento activo correctamente con setActiveItem", () => {
     const newState = reducer(initialState, setActiveItem("dashboard"));
     expect(newState.activeItem).toBe("dashboard");
-    expect(newState.section).toBe("home"); 
+    expect(newState.section).toBe("home");
   });
 
   it("no debería mutar el estado original (inmutabilidad)", () => {

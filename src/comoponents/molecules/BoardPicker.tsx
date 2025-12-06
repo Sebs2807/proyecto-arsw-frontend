@@ -140,40 +140,42 @@ const BoardPicker: React.FC<{
             </div>
           ) : (
             <>
-              <div
+              <button
+                type="button"
                 onMouseDown={() => {
                   setSelectedBoardId(null);
                   setBoardSearchTerm("");
                   setIsDropdownOpen(false);
                   handleApplyFilters();
                 }}
-                className={`px-3 py-2 cursor-pointer transition-colors text-sm ${
+                className={`w-full text-left px-3 py-2 transition-colors text-sm bg-transparent ${
                   selectedBoardId === null
                     ? "bg-limeyellow-500 text-white"
                     : "hover:bg-limeyellow-500 hover:text-white text-text-primary"
                 }`}
               >
                 All Boards
-              </div>
+              </button>
 
               {boards.length > 0 ? (
                 boards.map((board) => (
-                  <div
+                  <button
                     key={board.id}
+                    type="button"
                     onMouseDown={() => {
                       setSelectedBoardId(board.id);
                       setBoardSearchTerm(board.title);
                       setIsDropdownOpen(false);
                       handleApplyFilters();
                     }}
-                    className={`px-3 py-2 cursor-pointer transition-colors text-sm ${
+                    className={`w-full text-left px-3 py-2 transition-colors text-sm bg-transparent ${
                       selectedBoardId === board.id
                         ? "bg-limeyellow-500 text-white"
                         : "hover:bg-limeyellow-500 hover:text-white text-text-primary"
                     }`}
                   >
                     {board.title}
-                  </div>
+                  </button>
                 ))
               ) : (
                 <div className="px-3 py-2 text-text-secondary text-xs">

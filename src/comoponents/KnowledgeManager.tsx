@@ -15,63 +15,60 @@ import ChevronLeftIcon from "../assets/chevron-left.svg?react";
 import ChevronRightIcon from "../assets/chevron-right.svg?react";
 import ChevronDownIcon from "../assets/chevron-down.svg?react";
 import ChevronUpIcon from "../assets/chevron-up.svg?react";
-import BoardPicker from "./molecules/BoardPicker";
-import MembersModal from "./organisms/modals/memberModal";
+import KnowledgeModal from "./organisms/modals/knowledgeModal";
 
-const Role = {
-  SUPER_ADMIN: "superAdmin",
-  ADMIN: "admin",
-  MEMBER: "member",
-  GUEST: "guest",
-} as const;
-
-type Role = (typeof Role)[keyof typeof Role];
-
-interface Member {
+interface Knowledge {
   id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  picture?: string;
+  title: string;
+  text: string;
+  category:
+  | "product_feature"
+  | "pricing"
+  | "objection"
+  | "flow_step"
+  | "legal"
+  | "faq";
   createdAt: string;
   updatedAt: string;
-  role: Role;
 }
 
-interface TransformedRow {
+interface KnowledgeRaw {
   id: string;
-  name: string;
-  email: string;
-  createdAt: string;
-  updatedAt: string;
-  role: string;
+  payload: {
+    title: string;
+    text: string;
+    label?: string;
+    category:
+    | "product_feature"
+    | "pricing"
+    | "objection"
+    | "flow_step"
+    | "legal"
+    | "faq";
+    metadata?: Record<string, any>;
+  };
+  createdAt?: string;
+  updatedAt?: string;
 }
+
+interface TransformedRow extends Knowledge { }
 
 interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
+  points: T[];
+  total: number; // Total de ítems
+  page: number;
+  limit: number;
+  totalPages: number; // Total de páginas
 }
-
-const ROLE_OPTIONS = [
-  { value: "", label: "All Roles" },
-  { value: Role.SUPER_ADMIN, label: "Super Admin" },
-  { value: Role.ADMIN, label: "Admin" },
-  { value: Role.MEMBER, label: "Member" },
-  { value: Role.GUEST, label: "Guest" },
-];
 
 const ITEMS_PER_PAGE = 10;
 
-const MembersManager: React.FC = () => {
+const KnowledgeManager: React.FC = () => {
   const activeWorkspaceId = useSelector(
     (state: RootState) => state.workspace.selectedWorkspace?.id
   );
 
+  const [knowledgeItems, setKnowledgeItems] = useState<Knowledge[]>([]);
   const [data, setData] = useState<TransformedRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -79,159 +76,128 @@ const MembersManager: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRole, setSelectedRole] = useState("");
-  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
-
   const [tempSearchTerm, setTempSearchTerm] = useState("");
-  const [tempSelectedRole, setTempSelectedRole] = useState("");
-  const [tempBoardSearchTerm, setTempBoardSearchTerm] = useState("");
-  const [tempSelectedBoardId, setTempSelectedBoardId] = useState<string | null>(
-    null
-  );
-
   const [isFiltersVisible, setIsFiltersVisible] = useState(true);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMember, setModalMember] = useState<Member | null>(null);
+  const [modalItem, setModalItem] = useState<Knowledge | null>(null);
+  const [modalMode, setModalMode] = useState<"add" | "edit" | "delete">("add");
 
-  const transformMembers = (items: Member[]): TransformedRow[] => {
-    return items.map((m) => ({
-      id: m.id,
-      name: `${m.firstName} ${m.lastName}`,
-      email: m.email,
-      createdAt: new Date(m.createdAt).toLocaleDateString(),
-      updatedAt: new Date(m.updatedAt).toLocaleDateString(),
-      role: Object.entries(Role).find(([, v]) => v === m.role)?.[0] || m.role,
-    }));
-  };
-
-
-const CONFIG = useMemo(
-  () => ({
-    endpoint: "/v1/users/paginated",
-    columns: [
-      { key: "name", label: "Name" },
-      { key: "email", label: "Email" },
-      { key: "createdAt", label: "Created" },
-      { key: "role", label: "Role" },
-      { key: "actions", label: "Actions" },
-    ],
-    transform: transformMembers,
-    title: "Members",
-    description: "View and manage workspace members.",
-  }),
-  []
-);
-
+  const CONFIG = useMemo(
+    () => ({
+      endpoint: "/v1/knowledges/paginated",
+      columns: [
+        { key: "title", label: "Title" },
+        { key: "category", label: "Category" },
+        { key: "text", label: "Text" },
+        { key: "createdAt", label: "Created" },
+        { key: "actions", label: "Actions" },
+      ],
+      transform: (items: Knowledge[]): TransformedRow[] =>
+        items.map((k) => ({
+          ...k,
+          createdAt: new Date(k.createdAt).toLocaleDateString(),
+          updatedAt: new Date(k.updatedAt).toLocaleDateString(),
+        })),
+      title: "Knowledge",
+      description: "View and manage your assistant knowledge base.",
+    }),
+    []
+  );
 
   const handleApplyFilters = useCallback(() => {
     setSearchTerm(tempSearchTerm);
-    setSelectedRole(tempSelectedRole);
-    setSelectedBoardId(tempSelectedBoardId);
     setPage(1);
-  }, [tempSearchTerm, tempSelectedRole, tempSelectedBoardId]);
+  }, [tempSearchTerm]);
 
   const handleResetFilters = useCallback(() => {
     setSearchTerm("");
-    setSelectedRole("");
-    setSelectedBoardId(null);
     setTempSearchTerm("");
-    setTempSelectedRole("");
-    setTempSelectedBoardId(null);
-    setTempBoardSearchTerm("");
     setPage(1);
   }, []);
 
-  const [modalMode, setModalMode] = useState<"add" | "edit" | "delete">("add");
-
   const handleAdd = () => {
     setModalMode("add");
-    setModalMember(null);
+    setModalItem(null);
     setIsModalOpen(true);
   };
 
-  const handleEdit = (item: Record<string, any>) => {
+  const handleEdit = (row: TransformedRow) => {
+    const item = knowledgeItems.find((k) => k.id === row.id);
+    if (!item) return;
     setModalMode("edit");
-    setModalMember({
-      id: item.id,
-      firstName: item.name.split(" ")[0],
-      lastName: item.name.split(" ")[1] || "",
-      email: item.email,
-      role: item.role.toLowerCase(),
-      createdAt: "",
-      updatedAt: "",
-    });
+    setModalItem(item);
     setIsModalOpen(true);
   };
 
-  const handleDelete = (item: Record<string, any>) => {
+  const handleDelete = (row: TransformedRow) => {
+    const item = knowledgeItems.find((k) => k.id === row.id);
+    if (!item) return;
     setModalMode("delete");
-    setModalMember({
-      id: item.id,
-      firstName: item.name.split(" ")[0],
-      lastName: item.name.split(" ")[1] || "",
-      email: item.email,
-      role: item.role.toLowerCase(),
-      createdAt: "",
-      updatedAt: "",
-    });
+    setModalItem(item);
     setIsModalOpen(true);
   };
 
   const fetchData = useCallback(async () => {
-    if (!activeWorkspaceId) return;
+    if (!activeWorkspaceId) {
+      console.warn("Active Workspace ID is required for fetching knowledge.");
+      return;
+    }
     const abortController = new AbortController();
-
     try {
       setLoading(true);
-      let query = `${
-        CONFIG.endpoint
-      }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
-        activeWorkspaceId
-      )}`;
-
+      let query = `${CONFIG.endpoint
+        }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
+          activeWorkspaceId
+        )}`;
       if (searchTerm.trim())
         query += `&search=${encodeURIComponent(searchTerm)}`;
-      if (selectedRole) query += `&role=${encodeURIComponent(selectedRole)}`;
-      if (selectedBoardId)
-        query += `&boardId=${encodeURIComponent(selectedBoardId)}`;
 
-      const response = await apiService.get<PaginatedResponse<Member>>(query, {
-        signal: abortController.signal,
-      });
+      const response = await apiService.get<PaginatedResponse<KnowledgeRaw>>(
+        query,
+        { signal: abortController.signal }
+      );
 
-      setData(CONFIG.transform(response.data || []));
-      setTotalItems(response.meta?.total ?? 0);
-      setTotalPages(response.meta?.totalPages ?? 1);
+      const transformed = (response.points || []).map((p) => ({
+        id: p.id,
+        title: p.payload?.title,
+        text: p.payload?.text || "",
+        category: p.payload?.category || "product_feature",
+        createdAt: p.payload?.metadata?.createdAt || new Date().toISOString(),
+        updatedAt: p.payload?.metadata?.updatedAt || new Date().toISOString(),
+      }));
+
+      console.log("Fetched knowledge items:", response);
+
+      setKnowledgeItems(transformed);
+      setData(CONFIG.transform(transformed));
+      setTotalItems(response.total);
+      setTotalPages(response.totalPages ?? 1);
     } catch (error: any) {
       if (error.name !== "CanceledError") {
         console.error(`Error fetching ${CONFIG.title}:`, error);
         setData([]);
+        setKnowledgeItems([]);
       }
     } finally {
       setLoading(false);
     }
-
     return () => abortController.abort();
-  }, [
-    page,
-    searchTerm,
-    selectedRole,
-    selectedBoardId,
-    activeWorkspaceId,
-    CONFIG,
-  ]);
+  }, [page, searchTerm, activeWorkspaceId, CONFIG]);
 
   useEffect(() => {
-    fetchData();
+    const fetch = async () => {
+      await fetchData();
+    };
+    fetch();
+    return () => {
+      // cleanup
+    };
   }, [fetchData]);
 
   useEffect(() => {
     setTempSearchTerm(searchTerm);
-    setTempSelectedRole(selectedRole);
-    setTempSelectedBoardId(selectedBoardId);
-  }, [searchTerm, selectedRole, selectedBoardId]);
+  }, [searchTerm]);
 
   const pageRange = useMemo(() => {
     const range: number[] = [];
@@ -247,17 +213,12 @@ const CONFIG = useMemo(
     | keyof TransformedRow
     | "actions"
   )[];
-
-  const areFiltersUnchanged =
-    tempSearchTerm === searchTerm &&
-    tempSelectedRole === selectedRole &&
-    tempSelectedBoardId === selectedBoardId;
-
-  const isAnyFilterActive =
-    searchTerm !== "" || selectedRole !== "" || selectedBoardId !== null;
+  const areFiltersUnchanged = tempSearchTerm === searchTerm;
+  const isAnyFilterActive = searchTerm !== "";
 
   return (
     <div className="flex flex-col h-full font-poppins">
+      {/* Header y filtros */}
       <div className="bg-dark-800 rounded-xl shadow-md p-3 mb-4 border border-dark-600">
         <div className="flex items-start justify-between">
           <div className="max-w-60">
@@ -278,9 +239,10 @@ const CONFIG = useMemo(
         </div>
 
         <button
-          type="button"
-          className="flex justify-between items-center w-full mt-3 pt-3 border-t border-dark-600 cursor-pointer bg-transparent"
+          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer w-full text-left"
           onClick={() => setIsFiltersVisible((v) => !v)}
+          aria-expanded={isFiltersVisible}
+          aria-label="Toggle filters visibility"
         >
           <h2 className="text-sm font-semibold text-text-primary">
             Filters{" "}
@@ -295,7 +257,7 @@ const CONFIG = useMemo(
               </span>
             )}
           </h2>
-          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full inline-flex">
             {isFiltersVisible ? (
               <ChevronUpIcon className="w-4 h-4" />
             ) : (
@@ -307,55 +269,18 @@ const CONFIG = useMemo(
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex flex-col w-full sm:w-48">
-            <label
-              htmlFor="general-search" 
-              className="text-xs text-text-secondary font-medium mb-1"
-            >                
-            General Search
+              <label htmlFor="knowledge-search" className="text-xs text-text-secondary font-medium mb-1">
+                General Search
               </label>
               <input
-                id="general-search"
+                id="knowledge-search"
                 value={tempSearchTerm}
                 onChange={(e) => setTempSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
-                placeholder="Name or Email..."
-                className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg 
-                 border border-dark-600 focus:outline-none focus:border-limeyellow-500
-                 transition-colors text-sm"
+                placeholder="Search by title or text..."
+                className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg border border-dark-600 focus:outline-none focus:border-limeyellow-500 transition-colors text-sm"
               />
             </div>
-
-            <div className="flex flex-col w-full sm:w-40">
-            <label
-              htmlFor="role-select"
-              className="text-xs text-text-secondary font-medium mb-1"
-            >                
-              Role
-              </label>
-              <select
-                id="role-select"
-                value={tempSelectedRole}
-                onChange={(e) => setTempSelectedRole(e.target.value)}
-                className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg 
-                 border border-dark-600 focus:outline-none focus:border-limeyellow-500
-                 transition-colors text-sm cursor-pointer"
-              >
-                {ROLE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <BoardPicker
-              boardSearchTerm={tempBoardSearchTerm}
-              selectedBoardId={tempSelectedBoardId}
-              setSelectedBoardId={setTempSelectedBoardId}
-              setBoardSearchTerm={setTempBoardSearchTerm}
-              handleApplyFilters={handleApplyFilters}
-            />
-
             <div className="flex space-x-2">
               <button
                 onClick={handleApplyFilters}
@@ -377,6 +302,7 @@ const CONFIG = useMemo(
       </div>
 
       <div className="flex-1 bg-dark-900 rounded-xl overflow-hidden">
+        {/* Tabla */}
         {loading ? (
           <div className="text-center text-text-secondary p-6">Loading...</div>
         ) : (
@@ -406,12 +332,8 @@ const CONFIG = useMemo(
                     data.map((row, i) => (
                       <Fragment key={row.id || i}>
                         <tr
-                          onClick={() =>
-                            setExpandedRow(expandedRow === i ? null : i)
-                          }
-                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${
-                            i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
-                          }`}
+                          className={`border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
+                            }`}
                         >
                           {headers.map((key) =>
                             key === "actions" ? (
@@ -451,16 +373,14 @@ const CONFIG = useMemo(
               </table>
             </div>
 
+            {/* Paginación */}
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>
-                  {" – "}
-                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>
-                  {" of "}
-                  <strong>{totalItems}</strong>
+                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>–{" "}
+                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>{" "}
+                  of <strong>{totalItems}</strong>
                 </span>
-
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setPage((p) => Math.max(p - 1, 1))}
@@ -469,22 +389,19 @@ const CONFIG = useMemo(
                   >
                     <ChevronLeftIcon className="w-4 h-4" />
                   </button>
-
                   {pageRange.map((p) => (
                     <button
                       key={p}
                       onClick={() => setPage(p)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                        p === page
-                          ? "bg-limeyellow-500 text-dark-900"
-                          : "text-text-secondary hover:bg-dark-700"
-                      }`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${p === page
+                        ? "bg-limeyellow-500 text-dark-900"
+                        : "text-text-secondary hover:bg-dark-700"
+                        }`}
                       disabled={loading}
                     >
                       {p}
                     </button>
                   ))}
-
                   <button
                     onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                     disabled={page === totalPages || loading}
@@ -499,15 +416,16 @@ const CONFIG = useMemo(
         )}
       </div>
 
-      <MembersModal
+      <KnowledgeModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchData}
-        member={modalMember}
+        knowledge={modalItem}
         mode={modalMode}
+        agentId={activeWorkspaceId || ""}
       />
     </div>
   );
 };
 
-export default MembersManager;
+export default KnowledgeManager;

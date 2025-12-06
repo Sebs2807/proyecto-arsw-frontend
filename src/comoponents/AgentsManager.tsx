@@ -16,62 +16,59 @@ import ChevronRightIcon from "../assets/chevron-right.svg?react";
 import ChevronDownIcon from "../assets/chevron-down.svg?react";
 import ChevronUpIcon from "../assets/chevron-up.svg?react";
 import BoardPicker from "./molecules/BoardPicker";
-import MembersModal from "./organisms/modals/memberModal";
+import AgentModal from "./organisms/modals/agentsModal";
 
-const Role = {
-  SUPER_ADMIN: "superAdmin",
-  ADMIN: "admin",
-  MEMBER: "member",
-  GUEST: "guest",
-} as const;
-
-type Role = (typeof Role)[keyof typeof Role];
-
-interface Member {
+// Tipos que coinciden con el backend
+export interface Board {
   id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  picture?: string;
+  title: string;
+}
+
+export interface List {
+  id: string;
+  title: string;
+  // ... otros campos según ListDto
+}
+
+export interface Agent {
+  id: string;
+  name: string;
+  flowConfig: any;
+  workspaceId: string;
+  temperature: number;
+  maxTokens: number;
+  boards: Board[];
+  lists: List[];
+  lastRunAt: string | null;
   createdAt: string;
   updatedAt: string;
-  role: Role;
 }
 
 interface TransformedRow {
   id: string;
   name: string;
-  email: string;
+  boards: number;
+  lists: number;
   createdAt: string;
   updatedAt: string;
-  role: string;
 }
 
 interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-  };
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
 }
-
-const ROLE_OPTIONS = [
-  { value: "", label: "All Roles" },
-  { value: Role.SUPER_ADMIN, label: "Super Admin" },
-  { value: Role.ADMIN, label: "Admin" },
-  { value: Role.MEMBER, label: "Member" },
-  { value: Role.GUEST, label: "Guest" },
-];
 
 const ITEMS_PER_PAGE = 10;
 
-const MembersManager: React.FC = () => {
+const AgentsManager: React.FC = () => {
   const activeWorkspaceId = useSelector(
     (state: RootState) => state.workspace.selectedWorkspace?.id
   );
 
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [data, setData] = useState<TransformedRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -79,149 +76,128 @@ const MembersManager: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
 
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRole, setSelectedRole] = useState("");
-  const [selectedBoardId, setSelectedBoardId] = useState<string | null>(null);
-
   const [tempSearchTerm, setTempSearchTerm] = useState("");
-  const [tempSelectedRole, setTempSelectedRole] = useState("");
+  const [isFiltersVisible, setIsFiltersVisible] = useState(true);
+  const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalAgent, setModalAgent] = useState<Agent | null>(null);
+  const [modalMode, setModalMode] = useState<"add" | "edit" | "delete">("add");
+
   const [tempBoardSearchTerm, setTempBoardSearchTerm] = useState("");
   const [tempSelectedBoardId, setTempSelectedBoardId] = useState<string | null>(
     null
   );
 
-  const [isFiltersVisible, setIsFiltersVisible] = useState(true);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMember, setModalMember] = useState<Member | null>(null);
-
-  const transformMembers = (items: Member[]): TransformedRow[] => {
-    return items.map((m) => ({
-      id: m.id,
-      name: `${m.firstName} ${m.lastName}`,
-      email: m.email,
-      createdAt: new Date(m.createdAt).toLocaleDateString(),
-      updatedAt: new Date(m.updatedAt).toLocaleDateString(),
-      role: Object.entries(Role).find(([, v]) => v === m.role)?.[0] || m.role,
-    }));
-  };
-
-
-const CONFIG = useMemo(
-  () => ({
-    endpoint: "/v1/users/paginated",
-    columns: [
-      { key: "name", label: "Name" },
-      { key: "email", label: "Email" },
-      { key: "createdAt", label: "Created" },
-      { key: "role", label: "Role" },
-      { key: "actions", label: "Actions" },
-    ],
-    transform: transformMembers,
-    title: "Members",
-    description: "View and manage workspace members.",
-  }),
-  []
-);
-
+  const CONFIG = useMemo(
+    () => ({
+      endpoint: "/v1/agents/paginated", // ✅ Endpoint correcto
+      columns: [
+        { key: "name", label: "Name" },
+        { key: "boards", label: "Boards" },
+        { key: "lists", label: "Lists" }, // ✅ Agregada columna de listas
+        { key: "createdAt", label: "Created" },
+        { key: "actions", label: "Actions" },
+      ],
+      transform: (items: Agent[]): TransformedRow[] =>
+        items.map((a) => ({
+          id: a.id,
+          name: a.name,
+          boards: a.boards?.length || 0, // ✅ Manejo seguro de undefined
+          lists: a.lists?.length || 0, // ✅ Agregado
+          createdAt: new Date(a.createdAt).toLocaleDateString(),
+          updatedAt: new Date(a.updatedAt).toLocaleDateString(),
+        })),
+      title: "Agents",
+      description: "View and manage workspace AI agents.",
+    }),
+    []
+  );
 
   const handleApplyFilters = useCallback(() => {
     setSearchTerm(tempSearchTerm);
-    setSelectedRole(tempSelectedRole);
-    setSelectedBoardId(tempSelectedBoardId);
     setPage(1);
-  }, [tempSearchTerm, tempSelectedRole, tempSelectedBoardId]);
+  }, [tempSearchTerm]);
 
   const handleResetFilters = useCallback(() => {
     setSearchTerm("");
-    setSelectedRole("");
-    setSelectedBoardId(null);
     setTempSearchTerm("");
-    setTempSelectedRole("");
-    setTempSelectedBoardId(null);
-    setTempBoardSearchTerm("");
+    setTempSelectedBoardId(null); // ✅ Resetear también el board seleccionado
     setPage(1);
   }, []);
 
-  const [modalMode, setModalMode] = useState<"add" | "edit" | "delete">("add");
-
   const handleAdd = () => {
     setModalMode("add");
-    setModalMember(null);
+    setModalAgent(null);
     setIsModalOpen(true);
   };
 
-  const handleEdit = (item: Record<string, any>) => {
+  const handleEdit = (row: TransformedRow) => {
+    const agent = agents.find((a) => a.id === row.id);
+    if (!agent) return;
     setModalMode("edit");
-    setModalMember({
-      id: item.id,
-      firstName: item.name.split(" ")[0],
-      lastName: item.name.split(" ")[1] || "",
-      email: item.email,
-      role: item.role.toLowerCase(),
-      createdAt: "",
-      updatedAt: "",
-    });
+    setModalAgent(agent);
     setIsModalOpen(true);
   };
 
-  const handleDelete = (item: Record<string, any>) => {
+  const handleDelete = (row: TransformedRow) => {
+    const agent = agents.find((a) => a.id === row.id);
+    if (!agent) return;
     setModalMode("delete");
-    setModalMember({
-      id: item.id,
-      firstName: item.name.split(" ")[0],
-      lastName: item.name.split(" ")[1] || "",
-      email: item.email,
-      role: item.role.toLowerCase(),
-      createdAt: "",
-      updatedAt: "",
-    });
+    setModalAgent(agent);
     setIsModalOpen(true);
   };
 
   const fetchData = useCallback(async () => {
-    if (!activeWorkspaceId) return;
-    const abortController = new AbortController();
+    if (!activeWorkspaceId) {
+      console.warn("No active workspace selected");
+      return;
+    }
 
+    const abortController = new AbortController();
     try {
       setLoading(true);
-      let query = `${
-        CONFIG.endpoint
-      }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
-        activeWorkspaceId
-      )}`;
 
-      if (searchTerm.trim())
-        query += `&search=${encodeURIComponent(searchTerm)}`;
-      if (selectedRole) query += `&role=${encodeURIComponent(selectedRole)}`;
-      if (selectedBoardId)
-        query += `&boardId=${encodeURIComponent(selectedBoardId)}`;
+      // ✅ Construcción correcta de query params
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: ITEMS_PER_PAGE.toString(),
+        workspaceId: activeWorkspaceId,
+      });
 
-      const response = await apiService.get<PaginatedResponse<Member>>(query, {
+      if (searchTerm.trim()) {
+        params.append("search", searchTerm.trim());
+      }
+
+      if (tempSelectedBoardId) {
+        params.append("boardId", tempSelectedBoardId);
+      }
+
+      const query = `${CONFIG.endpoint}?${params.toString()}`;
+      console.log("Fetching agents with query:", query);
+
+      const response = await apiService.get<PaginatedResponse<Agent>>(query, {
         signal: abortController.signal,
       });
 
-      setData(CONFIG.transform(response.data || []));
-      setTotalItems(response.meta?.total ?? 0);
-      setTotalPages(response.meta?.totalPages ?? 1);
+      console.log("Agents response:", response);
+
+      setAgents(response.items || []);
+      setData(CONFIG.transform(response.items || []));
+      setTotalItems(response.total ?? 0);
+      setTotalPages(response.totalPages ?? 1);
     } catch (error: any) {
       if (error.name !== "CanceledError") {
         console.error(`Error fetching ${CONFIG.title}:`, error);
         setData([]);
+        setAgents([]);
       }
     } finally {
       setLoading(false);
     }
 
     return () => abortController.abort();
-  }, [
-    page,
-    searchTerm,
-    selectedRole,
-    selectedBoardId,
-    activeWorkspaceId,
-    CONFIG,
-  ]);
+  }, [page, searchTerm, activeWorkspaceId, tempSelectedBoardId, CONFIG]);
 
   useEffect(() => {
     fetchData();
@@ -229,9 +205,7 @@ const CONFIG = useMemo(
 
   useEffect(() => {
     setTempSearchTerm(searchTerm);
-    setTempSelectedRole(selectedRole);
-    setTempSelectedBoardId(selectedBoardId);
-  }, [searchTerm, selectedRole, selectedBoardId]);
+  }, [searchTerm]);
 
   const pageRange = useMemo(() => {
     const range: number[] = [];
@@ -247,14 +221,9 @@ const CONFIG = useMemo(
     | keyof TransformedRow
     | "actions"
   )[];
-
   const areFiltersUnchanged =
-    tempSearchTerm === searchTerm &&
-    tempSelectedRole === selectedRole &&
-    tempSelectedBoardId === selectedBoardId;
-
-  const isAnyFilterActive =
-    searchTerm !== "" || selectedRole !== "" || selectedBoardId !== null;
+    tempSearchTerm === searchTerm && tempSelectedBoardId === null; // ✅ Considerar también el board filter
+  const isAnyFilterActive = searchTerm !== "" || tempSelectedBoardId !== null;
 
   return (
     <div className="flex flex-col h-full font-poppins">
@@ -279,8 +248,9 @@ const CONFIG = useMemo(
 
         <button
           type="button"
-          className="flex justify-between items-center w-full mt-3 pt-3 border-t border-dark-600 cursor-pointer bg-transparent"
+          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer w-full text-left"
           onClick={() => setIsFiltersVisible((v) => !v)}
+          aria-expanded={isFiltersVisible}
         >
           <h2 className="text-sm font-semibold text-text-primary">
             Filters{" "}
@@ -295,7 +265,7 @@ const CONFIG = useMemo(
               </span>
             )}
           </h2>
-          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+          <span className="p-1 text-text-secondary">
             {isFiltersVisible ? (
               <ChevronUpIcon className="w-4 h-4" />
             ) : (
@@ -307,47 +277,21 @@ const CONFIG = useMemo(
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex flex-col w-full sm:w-48">
-            <label
-              htmlFor="general-search" 
-              className="text-xs text-text-secondary font-medium mb-1"
-            >                
-            General Search
+              <label
+                htmlFor="agents-general-search"
+                className="text-xs text-text-secondary font-medium mb-1"
+              >
+                General Search
               </label>
               <input
-                id="general-search"
+                id="agents-general-search"
                 value={tempSearchTerm}
                 onChange={(e) => setTempSearchTerm(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
-                placeholder="Name or Email..."
-                className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg 
-                 border border-dark-600 focus:outline-none focus:border-limeyellow-500
-                 transition-colors text-sm"
+                placeholder="Search by name..."
+                className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg border border-dark-600 focus:outline-none focus:border-limeyellow-500 transition-colors text-sm"
               />
             </div>
-
-            <div className="flex flex-col w-full sm:w-40">
-            <label
-              htmlFor="role-select"
-              className="text-xs text-text-secondary font-medium mb-1"
-            >                
-              Role
-              </label>
-              <select
-                id="role-select"
-                value={tempSelectedRole}
-                onChange={(e) => setTempSelectedRole(e.target.value)}
-                className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg 
-                 border border-dark-600 focus:outline-none focus:border-limeyellow-500
-                 transition-colors text-sm cursor-pointer"
-              >
-                {ROLE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <BoardPicker
               boardSearchTerm={tempBoardSearchTerm}
               selectedBoardId={tempSelectedBoardId}
@@ -355,21 +299,20 @@ const CONFIG = useMemo(
               setBoardSearchTerm={setTempBoardSearchTerm}
               handleApplyFilters={handleApplyFilters}
             />
-
             <div className="flex space-x-2">
               <button
                 onClick={handleApplyFilters}
                 disabled={areFiltersUnchanged}
                 className="px-4 py-1.5 bg-limeyellow-600 hover:bg-limeyellow-400 text-text-primary text-sm font-semibold rounded-lg disabled:opacity-50"
               >
-                Aplicar
+                Apply
               </button>
               <button
                 onClick={handleResetFilters}
                 disabled={!isAnyFilterActive}
                 className="px-4 py-1.5 bg-dark-600 hover:bg-dark-700 text-text-secondary text-sm rounded-lg disabled:opacity-50"
               >
-                Reiniciar
+                Reset
               </button>
             </div>
           </div>
@@ -399,7 +342,7 @@ const CONFIG = useMemo(
                         colSpan={headers.length}
                         className="px-4 py-6 text-center text-text-muted"
                       >
-                        No data available.
+                        No agents found. Create your first agent to get started.
                       </td>
                     </tr>
                   ) : (
@@ -409,9 +352,8 @@ const CONFIG = useMemo(
                           onClick={() =>
                             setExpandedRow(expandedRow === i ? null : i)
                           }
-                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${
-                            i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
-                          }`}
+                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
+                            }`}
                         >
                           {headers.map((key) =>
                             key === "actions" ? (
@@ -422,7 +364,8 @@ const CONFIG = useMemo(
                                       e.stopPropagation();
                                       handleEdit(row);
                                     }}
-                                    className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"
+                                    className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg transition-colors"
+                                    title="Edit agent"
                                   >
                                     <EditIcon className="w-4 h-4 text-text-primary" />
                                   </button>
@@ -431,15 +374,16 @@ const CONFIG = useMemo(
                                       e.stopPropagation();
                                       handleDelete(row);
                                     }}
-                                    className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"
+                                    className="p-1 bg-dark-600 hover:bg-red-500 rounded-lg transition-colors"
+                                    title="Delete agent"
                                   >
-                                    <TrashIcon className="w-4 h-4 text-text-primary hover:text-red-500" />
+                                    <TrashIcon className="w-4 h-4 text-text-primary" />
                                   </button>
                                 </div>
                               </td>
                             ) : (
                               <td key={key as string} className="px-4 py-3">
-                                {row[key] || "-"}
+                                {row[key] ?? "-"}
                               </td>
                             )
                           )}
@@ -454,41 +398,35 @@ const CONFIG = useMemo(
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>
-                  {" – "}
-                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>
-                  {" of "}
-                  <strong>{totalItems}</strong>
+                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>-<strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong> of <strong>{totalItems}</strong>
                 </span>
-
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setPage((p) => Math.max(p - 1, 1))}
                     disabled={page === 1 || loading}
-                    className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50"
+                    className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50 transition-colors"
+                    title="Previous page"
                   >
                     <ChevronLeftIcon className="w-4 h-4" />
                   </button>
-
                   {pageRange.map((p) => (
                     <button
                       key={p}
                       onClick={() => setPage(p)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                        p === page
-                          ? "bg-limeyellow-500 text-dark-900"
-                          : "text-text-secondary hover:bg-dark-700"
-                      }`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${p === page
+                        ? "bg-limeyellow-500 text-dark-900"
+                        : "text-text-secondary hover:bg-dark-700"
+                        }`}
                       disabled={loading}
                     >
                       {p}
                     </button>
                   ))}
-
                   <button
                     onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                     disabled={page === totalPages || loading}
-                    className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50"
+                    className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50 transition-colors"
+                    title="Next page"
                   >
                     <ChevronRightIcon className="w-4 h-4" />
                   </button>
@@ -499,15 +437,15 @@ const CONFIG = useMemo(
         )}
       </div>
 
-      <MembersModal
+      <AgentModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={fetchData}
-        member={modalMember}
+        agent={modalAgent}
         mode={modalMode}
       />
-    </div>
+    </div >
   );
 };
 
-export default MembersManager;
+export default AgentsManager;

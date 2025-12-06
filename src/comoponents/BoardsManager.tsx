@@ -1,10 +1,4 @@
-import React, {
-  useEffect,
-  useState,
-  useCallback,
-  useMemo,
-  Fragment,
-} from "react";
+import React, { useEffect, useState, useCallback, useMemo, Fragment } from "react";
 import { useSelector } from "react-redux";
 import type { RootState } from "../store";
 import { apiService } from "../services/api/ApiService";
@@ -17,54 +11,17 @@ import ChevronDownIcon from "../assets/chevron-down.svg?react";
 import ChevronUpIcon from "../assets/chevron-up.svg?react";
 import BoardsModal from "./organisms/modals/boardsModal";
 
-interface UserDto {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  picture?: string;
-  role: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-interface Board {
-  id: string;
-  title: string;
-  description?: string;
-  color: string;
-  createdAt: string;
-  updatedAt: string;
-  members?: UserDto[];
-}
-
-interface TransformedRow {
-  id: string;
-  title: string;
-  description: string;
-  color: string;
-  createdAt: string;
-  updatedAt: string;
-  members: UserDto[];
-}
-
-interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+interface UserDto { id: string; firstName: string; lastName: string; email: string; picture?: string; role: string; createdAt: string; updatedAt: string; }
+interface Board { id: string; title: string; description?: string; color: string; createdAt: string; updatedAt: string; members?: UserDto[]; }
+interface TransformedRow { id: string; title: string; description: string; color: string; createdAt: string; updatedAt: string; members: UserDto[]; }
+interface PaginatedResponse<T> { items: T[]; total: number; page: number; limit: number; totalPages: number; }
 
 const ITEMS_PER_PAGE = 10;
 
 const BoardsManager: React.FC = () => {
-  const activeWorkspaceId = useSelector(
-    (state: RootState) => state.workspace.selectedWorkspace?.id
-  );
+  const activeWorkspaceId = useSelector((state: RootState) => state.workspace.selectedWorkspace?.id);
 
-  const [boards, setBoards] = useState<Board[]>([]); // Datos completos
-  const [data, setData] = useState<TransformedRow[]>([]); // Solo para la tabla
+  const [data, setData] = useState<TransformedRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
@@ -73,110 +30,70 @@ const BoardsManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [tempSearchTerm, setTempSearchTerm] = useState("");
   const [isFiltersVisible, setIsFiltersVisible] = useState(true);
-  const [expandedRow, setExpandedRow] = useState<number | null>(null);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalBoard, setModalBoard] = useState<Board | null>(null);
   const [modalMode, setModalMode] = useState<"add" | "edit" | "delete">("add");
 
-  const CONFIG = useMemo(
-    () => ({
-      endpoint: "/v1/boards/paginated",
-      columns: [
-        { key: "title", label: "Title" },
-        { key: "description", label: "Description" },
-        { key: "color", label: "Color" },
-        { key: "createdAt", label: "Created" },
-        { key: "actions", label: "Actions" },
-      ],
-      transform: (items: Board[]): TransformedRow[] =>
-        items.map((b) => ({
-          id: b.id,
-          title: b.title,
-          description: b.description || "-",
-          color: b.color,
-          createdAt: new Date(b.createdAt).toLocaleDateString(),
-          updatedAt: new Date(b.updatedAt).toLocaleDateString(),
-          members: b.members || [],
-        })),
-      title: "Boards",
-      description: "View and manage workspace boards.",
-    }),
-    []
-  );
+  const CONFIG = useMemo(() => ({
+    endpoint: "/v1/boards/paginated",
+    columns: [
+      { key: "title", label: "Title" },
+      { key: "description", label: "Description" },
+      { key: "color", label: "Color" },
+      { key: "createdAt", label: "Created" },
+      { key: "actions", label: "Actions" },
+    ],
+    transform: (items: Board[]): TransformedRow[] =>
+      items.map((b) => ({
+        id: b.id,
+        title: b.title,
+        description: b.description || "-",
+        color: b.color,
+        createdAt: new Date(b.createdAt).toLocaleDateString(),
+        updatedAt: new Date(b.updatedAt).toLocaleDateString(),
+        members: b.members || [],
+      })),
+    title: "Boards",
+    description: "View and manage workspace boards.",
+  }), []);
 
-  const handleApplyFilters = useCallback(() => {
-    setSearchTerm(tempSearchTerm);
-    setPage(1);
-  }, [tempSearchTerm]);
+  const applyFilters = useCallback(() => { setSearchTerm(tempSearchTerm); setPage(1); }, [tempSearchTerm]);
+  const resetFilters = useCallback(() => { setSearchTerm(""); setTempSearchTerm(""); setPage(1); }, []);
 
-  const handleResetFilters = useCallback(() => {
-    setSearchTerm("");
-    setTempSearchTerm("");
-    setPage(1);
-  }, []);
-
-  const handleAdd = () => {
-    setModalMode("add");
-    setModalBoard(null);
-    setIsModalOpen(true);
-  };
-
-  const handleEdit = (row: TransformedRow) => {
-    const board = boards.find((b) => b.id === row.id);
-    if (!board) return;
-    setModalMode("edit");
+  const openModal = (mode: "add" | "edit" | "delete", board: Board | null = null) => {
+    setModalMode(mode);
     setModalBoard(board);
     setIsModalOpen(true);
   };
-
-  const handleDelete = (row: TransformedRow) => {
-    const board = boards.find((b) => b.id === row.id);
-    if (!board) return;
-    setModalMode("delete");
-    setModalBoard(board);
-    setIsModalOpen(true);
-  };
+  // ---------------------------------------------
 
   const fetchData = useCallback(async () => {
     if (!activeWorkspaceId) return;
     const abortController = new AbortController();
     try {
       setLoading(true);
-      let query = `${
-        CONFIG.endpoint
-      }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
-        activeWorkspaceId
-      )}`;
+      let query = `${CONFIG.endpoint
+        }?page=${page}&limit=${ITEMS_PER_PAGE}&workspaceId=${encodeURIComponent(
+          activeWorkspaceId
+        )}`;
       if (searchTerm.trim())
         query += `&search=${encodeURIComponent(searchTerm)}`;
       const response = await apiService.get<PaginatedResponse<Board>>(query, {
         signal: abortController.signal,
       });
 
-      setBoards(response.items || []);
       setData(CONFIG.transform(response.items || []));
       setTotalItems(response.total ?? 0);
       setTotalPages(response.totalPages ?? 1);
     } catch (error: any) {
-      if (error.name !== "CanceledError") {
-        console.error(`Error fetching ${CONFIG.title}:`, error);
-        setData([]);
-        setBoards([]);
-      }
-    } finally {
-      setLoading(false);
-    }
+      if (error.name !== "CanceledError") { console.error(`Error fetching ${CONFIG.title}:`, error); setData([]); }
+    } finally { setLoading(false); }
     return () => abortController.abort();
   }, [page, searchTerm, activeWorkspaceId, CONFIG]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  useEffect(() => {
-    setTempSearchTerm(searchTerm);
-  }, [searchTerm]);
+  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { setTempSearchTerm(searchTerm); }, [searchTerm]);
 
   const pageRange = useMemo(() => {
     const range: number[] = [];
@@ -188,108 +105,89 @@ const BoardsManager: React.FC = () => {
     return range;
   }, [page, totalPages]);
 
-  const headers = CONFIG.columns.map((c) => c.key) as (
-    | keyof TransformedRow
-    | "actions"
-  )[];
+  const headers = CONFIG.columns.map(c => c.key) as (keyof TransformedRow | "actions")[];
   const areFiltersUnchanged = tempSearchTerm === searchTerm;
   const isAnyFilterActive = searchTerm !== "";
 
+  let filterStatusLabel = null;
+  if (!areFiltersUnchanged) {
+    filterStatusLabel = (
+      <span className="ml-2 text-limeyellow-500 text-xs font-bold">
+        (Pending Apply)
+      </span>
+    );
+  } else if (isAnyFilterActive) {
+    filterStatusLabel = (
+      <span className="ml-2 text-text-secondary text-xs font-normal">
+        (Active)
+      </span>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full font-poppins">
+      {/* Header & Filters */}
       <div className="bg-dark-800 rounded-xl shadow-md p-3 mb-4 border border-dark-600">
         <div className="flex items-start justify-between">
           <div className="max-w-60">
-            <h1 className="text-lg font-bold text-text-primary">
-              {CONFIG.title}
-            </h1>
-            <p className="text-xs text-text-secondary mt-1">
-              {CONFIG.description}
-            </p>
+            <h1 className="text-lg font-bold text-text-primary">{CONFIG.title}</h1>
+            <p className="text-xs text-text-secondary mt-1">{CONFIG.description}</p>
           </div>
-          <button
-            onClick={handleAdd}
-            className="flex items-center gap-1 bg-limeyellow-500 hover:bg-limeyellow-400 text-text-primary text-sm font-semibold px-3 py-2 rounded-lg"
-          >
-            <PlusIcon className="w-4 h-4 text-text-primary" />
-            Add
+          <button onClick={() => openModal("add")} className="flex items-center gap-1 bg-limeyellow-500 hover:bg-limeyellow-400 text-text-primary text-sm font-semibold px-3 py-2 rounded-lg">
+            <PlusIcon className="w-4 h-4 text-text-primary" /> Add
           </button>
         </div>
 
-        <div
-          className="flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer"
-          onClick={() => setIsFiltersVisible((v) => !v)}
+        <button
+          type="button"
+          className="w-full flex justify-between items-center mt-3 pt-3 border-t border-dark-600 cursor-pointer bg-transparent"
+          onClick={() => setIsFiltersVisible(v => !v)}
         >
-          <h2 className="text-sm font-semibold text-text-primary">
+          <div className="text-sm font-semibold text-text-primary">
             Filters{" "}
-            {!areFiltersUnchanged && (
-              <span className="ml-2 text-limeyellow-500 text-xs font-bold">
-                (Pending Apply)
-              </span>
-            )}
-            {areFiltersUnchanged && isAnyFilterActive && (
-              <span className="ml-2 text-text-secondary text-xs font-normal">
-                (Active)
-              </span>
-            )}
-          </h2>
-          <button className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
+            {filterStatusLabel}
+          </div>
+          <span className="p-1 text-text-secondary hover:bg-dark-700 rounded-full">
             {isFiltersVisible ? (
               <ChevronUpIcon className="w-4 h-4" />
             ) : (
               <ChevronDownIcon className="w-4 h-4" />
             )}
-          </button>
-        </div>
+          </span>
+        </button>
 
         {isFiltersVisible && (
           <div className="mt-3 flex flex-col sm:flex-row gap-4 items-end">
             <div className="flex flex-col w-full sm:w-48">
-              <label className="text-xs text-text-secondary font-medium mb-1">
-                General Search
-              </label>
+              <label
+                htmlFor="general-search"
+                className="text-xs text-text-secondary font-medium mb-1"
+              >General Search</label>
               <input
                 value={tempSearchTerm}
-                onChange={(e) => setTempSearchTerm(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
+                onChange={e => setTempSearchTerm(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && applyFilters()}
                 placeholder="Search by title..."
                 className="w-full px-3 py-1.5 bg-dark-600 text-text-primary rounded-lg border border-dark-600 focus:outline-none focus:border-limeyellow-500 transition-colors text-sm"
               />
             </div>
             <div className="flex space-x-2">
-              <button
-                onClick={handleApplyFilters}
-                disabled={areFiltersUnchanged}
-                className="px-4 py-1.5 bg-limeyellow-600 hover:bg-limeyellow-400 text-text-primary text-sm font-semibold rounded-lg disabled:opacity-50"
-              >
-                Aplicar
-              </button>
-              <button
-                onClick={handleResetFilters}
-                disabled={!isAnyFilterActive}
-                className="px-4 py-1.5 bg-dark-600 hover:bg-dark-700 text-text-secondary text-sm rounded-lg disabled:opacity-50"
-              >
-                Reiniciar
-              </button>
+              <button onClick={applyFilters} disabled={areFiltersUnchanged} className="px-4 py-1.5 bg-limeyellow-600 hover:bg-limeyellow-400 text-text-primary text-sm font-semibold rounded-lg disabled:opacity-50">Aplicar</button>
+              <button onClick={resetFilters} disabled={!isAnyFilterActive} className="px-4 py-1.5 bg-dark-600 hover:bg-dark-700 text-text-secondary text-sm rounded-lg disabled:opacity-50">Reiniciar</button>
             </div>
           </div>
         )}
       </div>
 
+      {/* Table */}
       <div className="flex-1 bg-dark-900 rounded-xl overflow-hidden">
-        {loading ? (
-          <div className="text-center text-text-secondary p-6">Loading...</div>
-        ) : (
+        {loading ? <div className="text-center text-text-secondary p-6">Loading...</div> :
           <div className="bg-dark-800 rounded-2xl shadow-lg p-4 flex flex-col h-full">
             <div className="overflow-x-auto flex-grow">
               <table className="min-w-full border-collapse text-sm text-text-primary">
                 <thead>
                   <tr className="bg-dark-600 text-left uppercase text-xs tracking-wider">
-                    {CONFIG.columns.map((col) => (
-                      <th key={col.key} className="px-4 py-3 font-semibold">
-                        {col.label}
-                      </th>
-                    ))}
+                    {CONFIG.columns.map(col => <th key={col.key} className="px-4 py-3 font-semibold">{col.label}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -306,12 +204,8 @@ const BoardsManager: React.FC = () => {
                     data.map((row, i) => (
                       <Fragment key={row.id || i}>
                         <tr
-                          onClick={() =>
-                            setExpandedRow(expandedRow === i ? null : i)
-                          }
-                          className={`cursor-pointer border-b border-dark-700 hover:bg-dark-800 ${
-                            i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
-                          }`}
+                          className={`border-b border-dark-700 hover:bg-dark-800 ${i % 2 === 0 ? "bg-dark-900" : "bg-dark-800"
+                            }`}
                         >
                           {headers.map((key) =>
                             key === "actions" ? (
@@ -320,7 +214,7 @@ const BoardsManager: React.FC = () => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleEdit(row);
+                                      openModal("edit", row);
                                     }}
                                     className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"
                                   >
@@ -329,7 +223,7 @@ const BoardsManager: React.FC = () => {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleDelete(row);
+                                      openModal("delete", row);
                                     }}
                                     className="p-1 bg-dark-600 hover:bg-limeyellow-400 rounded-lg"
                                   >
@@ -337,29 +231,31 @@ const BoardsManager: React.FC = () => {
                                   </button>
                                 </div>
                               </td>
-                            ) : key === "color" ? (
-                              <td key={key as string} className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <span
-                                    className="w-5 h-5 rounded-full border border-dark-700"
-                                    style={{ backgroundColor: row.color }}
-                                  />
-                                </div>
-                              </td>
-                            ) : (
-                              <td key={key as string} className="px-4 py-3">
-                                {key === "members"
-                                  ? row.members.map((m) => (
-                                      <span
-                                        key={m.id}
-                                        className="inline-block bg-dark-600 text-text-primary text-xs px-2 py-1 mr-1 rounded"
-                                      >
-                                        {m.firstName} {m.lastName}
-                                      </span>
-                                    ))
-                                  : row[key] || "-"}
-                              </td>
-                            )
+
+                            ) : (() => {
+                              let content;
+
+                              if (key === "color") {
+                                content = (
+                                  <div className="flex items-center gap-2">
+                                    <span
+                                      className="w-5 h-5 rounded-full border border-dark-700"
+                                      style={{ backgroundColor: row.color }}
+                                    />
+                                  </div>
+                                );
+                              } else if (key === "members") {
+                                return null
+                              } else {
+                                content = row[key] || "-";
+                              }
+
+                              return (
+                                <td key={key as string} className="px-4 py-3">
+                                  {content}
+                                </td>
+                              );
+                            })()
                           )}
                         </tr>
                       </Fragment>
@@ -369,13 +265,18 @@ const BoardsManager: React.FC = () => {
               </table>
             </div>
 
+            {/* Pagination */}
             {totalPages > 1 && (
               <div className="flex justify-between items-center mt-4 pt-4 border-t border-dark-700">
                 <span className="text-xs text-text-secondary">
-                  Showing <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>–
-                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>{" "}
-                  of <strong>{totalItems}</strong>
+                  Showing{" "}
+                  <strong>{ITEMS_PER_PAGE * (page - 1) + 1}</strong>
+                  {" "}–{" "}
+                  <strong>{Math.min(ITEMS_PER_PAGE * page, totalItems)}</strong>
+                  {" "}of{" "}
+                  <strong>{totalItems}</strong>
                 </span>
+
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setPage((p) => Math.max(p - 1, 1))}
@@ -388,37 +289,23 @@ const BoardsManager: React.FC = () => {
                     <button
                       key={p}
                       onClick={() => setPage(p)}
-                      className={`px-3 py-1 rounded-lg text-sm font-medium ${
-                        p === page
-                          ? "bg-limeyellow-500 text-dark-900"
-                          : "text-text-secondary hover:bg-dark-700"
-                      }`}
+                      className={`px-3 py-1 rounded-lg text-sm font-medium ${p === page
+                        ? "bg-limeyellow-500 text-dark-900"
+                        : "text-text-secondary hover:bg-dark-700"
+                        }`}
                       disabled={loading}
                     >
                       {p}
                     </button>
                   ))}
-                  <button
-                    onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                    disabled={page === totalPages || loading}
-                    className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50"
-                  >
-                    <ChevronRightIcon className="w-4 h-4" />
-                  </button>
+                  <button onClick={() => setPage(p => Math.min(p + 1, totalPages))} disabled={page === totalPages || loading} className="p-2 rounded-full text-text-secondary hover:bg-dark-700 disabled:opacity-50"><ChevronRightIcon className="w-4 h-4" /></button>
                 </div>
               </div>
             )}
-          </div>
-        )}
+          </div>}
       </div>
 
-      <BoardsModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={fetchData}
-        board={modalBoard}
-        mode={modalMode}
-      />
+      <BoardsModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={fetchData} board={modalBoard} mode={modalMode} />
     </div>
   );
 };
