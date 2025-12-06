@@ -182,34 +182,34 @@ const renderDraggableCard = ({
   };
 
   const card = (
-    <div
+    <li
       ref={provided.innerRef}
       {...provided.draggableProps}
       {...provided.dragHandleProps}
       style={provided.draggableProps?.style}
-      onClick={handleClick}
-      onMouseDown={(e) => {
-        // Si otro usuario está arrastrando, bloquea interacción y cambia cursor
-        if (isBeingDraggedByAnother) {
-          try {
-            console.log('[Board] blocked drag attempt by other user', { id: String(task.id) });
-          } catch {}
-          e.preventDefault();
-          e.stopPropagation();
-          return;
-        }
-        try {
-          console.log('[Board] card onMouseDown', { id: String(task.id) });
-        } catch {}
-      }}
-      className={`relative text-left w-full p-3 rounded-lg border text-sm transition-all duration-300 select-none ${isBeingDraggedByAnother ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}
-        ${snapshot.isDragging
+      className={`relative text-left w-full p-3 rounded-lg border text-sm transition-all duration-300 select-none ${
+        isBeingDraggedByAnother ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'
+      } ${
+        snapshot.isDragging
           ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
           : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
-        }
-        ${isBeingDraggedByAnother ? "opacity-50" : ""}`}
-      role="listitem"
+      } ${isBeingDraggedByAnother ? "opacity-50" : ""}`}
     >
+      {/* Botón accesible que captura la interacción */}
+      <button
+        type="button"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        onClick={handleClick}
+        onMouseDown={(e) => {
+          if (isBeingDraggedByAnother) {
+            try {
+              console.log('[Board] blocked drag attempt by other user', { id: String(task.id) });
+            } catch {}
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
+      />
       {isBeingDraggedByAnother && (
         <span className="absolute top-1 left-1 text-xs bg-limeyellow-600 text-text-primary px-2 py-0.5 rounded-md shadow-md">
           {draggingNames[task.id] || "Cargando..."}
@@ -252,7 +252,7 @@ const renderDraggableCard = ({
           Llamada IA
         </button>
       </div>
-    </div>
+    </li>
   );
 
   return snapshot.isDragging ? (
@@ -364,6 +364,70 @@ const Board: React.FC = () => {
   const [scheduleRoomId, setScheduleRoomId] = useState<string | null>(null);
   const [isJoiningCall, setIsJoiningCall] = useState(false);
 
+  const normalizeCard = (l: any) => (c: any) => ({
+    id: String(c.id),
+    title: c.title,
+    description: c.description,
+    status: c.status,
+    contactName: c.contactName,
+    contactEmail: c.contactEmail,
+    contactPhone: c.contactPhone,
+    industry: c.industry,
+    priority: c.priority,
+    listId: String(c.listId ?? l.id),
+    dueDate: c.dueDate,
+  });
+
+  const normalizeList = (l: any) => ({
+      id: String(l.id),
+      title: l.title,
+      description: l.description,
+      order: Number(l.order ?? 0),
+      cards: (l.cards || []).map(normalizeCard(l)),
+    });
+
+    const scheduleActiveCallRemoval = (
+    cardId: string,
+    setActiveCalls: React.Dispatch<
+      React.SetStateAction<Record<string, any>>
+    >
+  ) => {
+    setTimeout(() => {
+      setActiveCalls((prev) => {
+        const current = prev[cardId];
+        if (!current) return prev;
+
+        const copy = { ...prev };
+        delete copy[cardId];
+        return copy;
+      });
+    }, 3000);
+  };
+
+  const handleCallEndedEvent = (
+    payload: { boardId?: string; cardId?: string; user?: string },
+    boardId: string,
+    removeActiveCall: (id: string) => void,
+    handleRoomCleanup: (cardId: string, endedBy: string) => void,
+    requestActiveCalls: () => void,
+    setActiveCalls: React.Dispatch<
+      React.SetStateAction<Record<string, any>>
+    >
+  ) => {
+    const { boardId: payloadBoardId, cardId, user: endedBy } = payload;
+
+    if (!cardId || payloadBoardId !== boardId) return;
+
+    removeActiveCall(cardId);
+    handleRoomCleanup(cardId, endedBy ?? "");
+
+    try {
+      requestActiveCalls();
+      scheduleActiveCallRemoval(cardId, setActiveCalls);
+    } catch {}
+  };
+
+
   // Dependencia del modal de edición para inicializar campos adicionales
   useEffect(() => {
     if (editingTask) {
@@ -389,28 +453,10 @@ const Board: React.FC = () => {
     const fetchLists = async (boardId: string) => {
       setLoading(true);
       setError(null);
+
       try {
         const data = await apiService.get<List[]>(`/v1/lists/board/${boardId}`);
-        // Normalizar IDs a string y asegurar estructura esperada para DnD
-        const normalized = (data || []).map((l: any) => ({
-          id: String(l.id),
-          title: l.title,
-          description: l.description,
-          order: Number(l.order ?? 0),
-          cards: (l.cards || []).map((c: any) => ({
-            id: String(c.id),
-            title: c.title,
-            description: c.description,
-            status: c.status,
-            contactName: c.contactName,
-            contactEmail: c.contactEmail,
-            contactPhone: c.contactPhone,
-            industry: c.industry,
-            priority: c.priority,
-            listId: String(c.listId ?? l.id),
-            dueDate: c.dueDate,
-          })),
-        }));
+        const normalized = (data || []).map(normalizeList);
         setLists(normalized);
       } catch (err) {
         console.error("Error al cargar las listas:", err);
@@ -418,7 +464,7 @@ const Board: React.FC = () => {
       } finally {
         setLoading(false);
       }
-    };
+    }
     fetchLists(selectedBoard.id);
   }, [selectedBoard?.id]);
 
@@ -572,33 +618,15 @@ const Board: React.FC = () => {
       }
     }
 
-    apiService.socket?.on(
-      "call:ended",
-      ({
-        boardId: payloadBoardId,
-        cardId,
-        user: endedBy,
-      }: {
-        boardId?: string;
-        cardId?: string;
-        user?: string;
-      }) => {
-        if (!cardId || payloadBoardId !== boardId) return;
-        removeActiveCall(cardId);
-        handleRoomCleanup(cardId, endedBy ?? "");
-        try {
-          requestActiveCalls();
-          setTimeout(() => {
-            setActiveCalls((prev) => {
-              const current = prev[cardId];
-              if (!current) return prev;
-              const copy = { ...prev } as any;
-              delete copy[cardId];
-              return copy;
-            });
-          }, 3000);
-        } catch {}
-      }
+    apiService.socket?.on("call:ended", (payload) =>
+      handleCallEndedEvent(
+        payload,
+        boardId,
+        removeActiveCall,
+        handleRoomCleanup,
+        requestActiveCalls,
+        setActiveCalls
+      )
     );
 
     function updateDraggingCards(data: any) {
@@ -1071,11 +1099,11 @@ const Board: React.FC = () => {
       };
 
       // Eliminar claves undefined
-      Object.keys(payload).forEach((key) => {
+      for (const key of Object.keys(payload)) {
         if (payload[key as keyof Task] === undefined) {
           delete payload[key as keyof Task];
         }
-      });
+      }
 
       if (!payload.title && editingTask.title) {
         alert("El título de la tarea no puede estar vacío.");
