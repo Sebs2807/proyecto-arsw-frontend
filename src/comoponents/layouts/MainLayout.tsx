@@ -10,6 +10,7 @@ import {
 } from "../../store/slices/workspaceSlice";
 import type { RootState, AppDispatch } from "../../store";
 import Sidebar from "../organisms/sidebar/Sidebar";
+import NotificationsFloat from "../atoms/NotificationsFloat";
 
 const MainLayout: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -84,6 +85,8 @@ const MainLayout: React.FC = () => {
           </div>
         </div>
       )}
+      {/* Floating notifications button */}
+      <NotificationsFloat />
     </div>
   );
 };
