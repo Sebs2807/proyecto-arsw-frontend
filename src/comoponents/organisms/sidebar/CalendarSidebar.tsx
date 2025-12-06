@@ -40,16 +40,16 @@ const CalendarSidebar: React.FC = () => {
 
   // Refresh when other parts of the app dispatch a calendar update
   React.useEffect(() => {
-    const onCalendarUpdated = () => {
+    const onCalendarUpdated = async () => {
       try {
-        fetchEvents(range);
+        await fetchEvents(range);
       } catch (e) {
         console.warn('CalendarSidebar: failed to refresh on calendar:updated', e);
       }
-    };
+    }; 
 
-    window.addEventListener('calendar:updated', onCalendarUpdated as EventListener);
-    return () => window.removeEventListener('calendar:updated', onCalendarUpdated as EventListener);
+    globalThis.addEventListener('calendar:updated', onCalendarUpdated as EventListener);
+    return () => globalThis.removeEventListener('calendar:updated', onCalendarUpdated as EventListener);
   }, [range]);
 
   const renderDate = (ev: EventItem) => {
