@@ -154,6 +154,16 @@ const renderDraggableCard = ({
   setModalIndustry,
   setModalPriority,
 }: any) => {
+  // Debug: render of draggable card
+  try {
+    console.log('[Board] renderDraggableCard', {
+      taskId: String(task?.id),
+      draggingByOther: Boolean(
+        draggingCards[task?.id] && draggingCards[task?.id].user !== user?.email
+      ),
+      isDragging: Boolean(snapshot?.isDragging),
+    });
+  } catch {}
   const isBeingDraggedByAnother =
     draggingCards[task.id] && draggingCards[task.id].user !== user?.email;
 
@@ -172,18 +182,33 @@ const renderDraggableCard = ({
   };
 
   const card = (
-    <button
+    <div
       ref={provided.innerRef}
       {...provided.draggableProps}
       {...provided.dragHandleProps}
-      type="button"
+      style={provided.draggableProps?.style}
       onClick={handleClick}
-      className={`relative text-left w-full p-3 rounded-lg border text-sm transition-all duration-300
+      onMouseDown={(e) => {
+        // Si otro usuario está arrastrando, bloquea interacción y cambia cursor
+        if (isBeingDraggedByAnother) {
+          try {
+            console.log('[Board] blocked drag attempt by other user', { id: String(task.id) });
+          } catch {}
+          e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        try {
+          console.log('[Board] card onMouseDown', { id: String(task.id) });
+        } catch {}
+      }}
+      className={`relative text-left w-full p-3 rounded-lg border text-sm transition-all duration-300 select-none ${isBeingDraggedByAnother ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'}
         ${snapshot.isDragging
           ? "bg-dark-800 border-limeyellow-500 scale-[1.02] shadow-md"
           : "bg-dark-800 border-dark-600 hover:border-limeyellow-400"
         }
-        ${isBeingDraggedByAnother ? "opacity-50 cursor-not-allowed" : ""}`}
+        ${isBeingDraggedByAnother ? "opacity-50" : ""}`}
+      role="listitem"
     >
       {isBeingDraggedByAnother && (
         <span className="absolute top-1 left-1 text-xs bg-limeyellow-600 text-text-primary px-2 py-0.5 rounded-md shadow-md">
@@ -203,7 +228,31 @@ const renderDraggableCard = ({
       <p className="text-xs mt-1 line-clamp-2 text-text-muted">
         {task.description}
       </p>
-    </button>
+
+      {/* Botón de llamada con IA (Twilio) */}
+      <div className="mt-2 flex justify-end">
+        <button
+          onClick={async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            try {
+              console.log('[Twilio] Iniciando llamada IA para card', { cardId: String(task.id) });
+              // Nota: el controlador expone POST /twilio/call
+              await apiService.post('/twilio/call', { cardId: String(task.id) });
+              console.log('[Twilio] Llamada iniciada');
+            } catch (err) {
+              console.error('[Twilio] Error iniciando llamada:', err);
+              alert('No se pudo iniciar la llamada IA. Revisa la consola.');
+            }
+          }}
+          className={`px-2 py-1 text-xs rounded border transition ${isBeingDraggedByAnother ? 'opacity-50 cursor-not-allowed' : 'hover:border-limeyellow-500 hover:text-limeyellow-400'}`}
+          disabled={isBeingDraggedByAnother}
+          title="Iniciar llamada con IA (Twilio)"
+        >
+          Llamada IA
+        </button>
+      </div>
+    </div>
   );
 
   return snapshot.isDragging ? (
@@ -290,7 +339,7 @@ const Board: React.FC = () => {
 
   // Estados del segundo bloque
   const [activeCalls, setActiveCalls] = useState<
-    Record<string, { roomId: string; startedBy?: string }>
+    Record<string, { roomId: string; startedBy?: string; lastSeen?: number }>
   >({});
   const [draggingCards, setDraggingCards] = useState<
     Record<string, { user: string; destListId: string; destIndex: number }>
@@ -342,7 +391,27 @@ const Board: React.FC = () => {
       setError(null);
       try {
         const data = await apiService.get<List[]>(`/v1/lists/board/${boardId}`);
-        setLists(data);
+        // Normalizar IDs a string y asegurar estructura esperada para DnD
+        const normalized = (data || []).map((l: any) => ({
+          id: String(l.id),
+          title: l.title,
+          description: l.description,
+          order: Number(l.order ?? 0),
+          cards: (l.cards || []).map((c: any) => ({
+            id: String(c.id),
+            title: c.title,
+            description: c.description,
+            status: c.status,
+            contactName: c.contactName,
+            contactEmail: c.contactEmail,
+            contactPhone: c.contactPhone,
+            industry: c.industry,
+            priority: c.priority,
+            listId: String(c.listId ?? l.id),
+            dueDate: c.dueDate,
+          })),
+        }));
+        setLists(normalized);
       } catch (err) {
         console.error("Error al cargar las listas:", err);
         setError("No se pudieron cargar las listas del tablero.");
@@ -415,12 +484,14 @@ const Board: React.FC = () => {
       calls: Array<{ cardId: string; roomId: string; startedBy?: string }>;
     }) => {
       if (payloadBoardId !== boardId) return;
-      const mapped: Record<string, { roomId: string; startedBy?: string }> = {};
+      const now = Date.now();
+      const mapped: Record<string, { roomId: string; startedBy?: string; lastSeen?: number }> = {};
       for (const call of calls) {
         if (call.cardId && call.roomId) {
           mapped[call.cardId] = {
             roomId: call.roomId,
             startedBy: call.startedBy,
+            lastSeen: now,
           };
         }
       }
@@ -463,7 +534,7 @@ const Board: React.FC = () => {
       if (!cardId) return;
       setActiveCalls((prev) => ({
         ...prev,
-        [cardId]: { roomId, startedBy: user },
+        [cardId]: { roomId, startedBy: user, lastSeen: Date.now() },
       }));
     });
 
@@ -494,7 +565,7 @@ const Board: React.FC = () => {
         LIVEKIT_ACTIVE_ROOM_KEY
       );
       const isSameActiveRoom = activeRoomId === cardId;
-      const endedByMe = endedBy === cardId; // Asumiendo que el socket 'call:ended' ya hace la limpieza del estado
+      const endedByMe = endedBy === (user?.email ?? "");
       if (isSameActiveRoom || endedByMe) {
         clearSession();
         redirectToBoards();
@@ -515,6 +586,18 @@ const Board: React.FC = () => {
         if (!cardId || payloadBoardId !== boardId) return;
         removeActiveCall(cardId);
         handleRoomCleanup(cardId, endedBy ?? "");
+        try {
+          requestActiveCalls();
+          setTimeout(() => {
+            setActiveCalls((prev) => {
+              const current = prev[cardId];
+              if (!current) return prev;
+              const copy = { ...prev } as any;
+              delete copy[cardId];
+              return copy;
+            });
+          }, 3000);
+        } catch {}
       }
     );
 
@@ -557,10 +640,30 @@ const Board: React.FC = () => {
       }
     );
 
+    // Purga de llamadas obsoletas si no se refrescan
+    const purgeInterval = setInterval(() => {
+      setActiveCalls((prev) => {
+        const activeRoomForThisClient =
+          globalThis.window?.sessionStorage.getItem(LIVEKIT_ACTIVE_ROOM_KEY) || null;
+        const now = Date.now();
+        const TTL = 20000; // 20s sin refresh -> limpiar
+        const copy: Record<string, { roomId: string; startedBy?: string; lastSeen?: number }> = { ...prev };
+        for (const [cardId, info] of Object.entries(copy)) {
+          const stale = !info.lastSeen || now - (info.lastSeen || 0) > TTL;
+          const isClientRoom = activeRoomForThisClient === cardId;
+          if (stale && !isClientRoom) {
+            delete copy[cardId];
+          }
+        }
+        return copy;
+      });
+    }, 10000);
+
     return () => {
       apiService.socket?.off("connect", requestActiveCalls);
       apiService.socket?.off("call:activeSet", handleCallActiveSet);
       apiService.disconnectSocket();
+      clearInterval(purgeInterval);
     };
   }, [selectedBoard?.id, user?.email]);
 
@@ -686,7 +789,7 @@ const Board: React.FC = () => {
         });
         setActiveCalls((prev) => ({
           ...prev,
-          [roomId]: { roomId, startedBy: user?.email },
+          [roomId]: { roomId, startedBy: user?.email, lastSeen: Date.now() },
         }));
       } catch (e) {
         console.error("Error starting call:", e);
@@ -1037,37 +1140,30 @@ const Board: React.FC = () => {
       {/* Kanban Board Layout */}
       <DragDropContext
         onDragStart={(start) => {
+          console.log('[Board] onDragStart', {
+            draggableId: String(start.draggableId),
+            source: start.source,
+          });
           apiService.socket?.emit("card:dragStart", {
             boardId: selectedBoard?.id,
             cardId: start.draggableId,
             user: user?.email ?? "anonymous@example.com",
           });
-
-          // Agregar listener de mousemove para notificar 'dragUpdate' (del primer bloque)
-          const handleMouseMove = (e: MouseEvent) => {
-            apiService.socket?.emit("card:dragUpdate", {
-              boardId: selectedBoard?.id,
-              cardId: start.draggableId,
-              x: e.clientX,
-              y: e.clientY,
+          // Bloqueo optimista local para evitar condiciones de carrera
+          setDraggingCards((prev) => ({
+            ...prev,
+            [start.draggableId]: {
               user: user?.email ?? "anonymous@example.com",
-            });
-          };
-
-          globalThis.window?.addEventListener("mousemove", handleMouseMove);
-
-          globalThis.window?.addEventListener(
-            "mouseup",
-            () => {
-              globalThis.window?.removeEventListener(
-                "mousemove",
-                handleMouseMove
-              );
+              destListId: start.source.droppableId,
+              destIndex: start.source.index,
             },
-            { once: true }
-          );
+          }));
         }}
         onDragUpdate={(update) => {
+          console.log('[Board] onDragUpdate', {
+            draggableId: String(update.draggableId),
+            destination: update.destination,
+          });
           if (!update.destination) return;
 
           apiService.socket?.emit("card:dragUpdate", {
@@ -1078,7 +1174,21 @@ const Board: React.FC = () => {
             user: user?.email ?? "anonymous@example.com",
           });
         }}
-        onDragEnd={handleDragEnd}
+        onDragEnd={(result) => {
+          console.log('[Board] onDragEnd', {
+            draggableId: String(result.draggableId),
+            source: result.source,
+            destination: result.destination,
+            reason: result.reason,
+          });
+          handleDragEnd(result);
+          // Limpieza optimista local
+          setDraggingCards((prev) => {
+            const copy = { ...prev } as any;
+            delete copy[result.draggableId];
+            return copy;
+          });
+        }}
       >
         <div className="flex-1 overflow-hidden">
           <div className="flex flex-row gap-6 overflow-x-auto h-full pb-0 scrollbar-custom">
@@ -1086,8 +1196,6 @@ const Board: React.FC = () => {
               <Droppable droppableId={list.id} key={list.id}>
                 {(provided) => (
                   <div
-                    ref={provided.innerRef}
-                    {...provided.droppableProps}
                     className="flex-shrink-0 w-[300px] bg-dark-800 rounded-lg border border-dark-600 p-4 flex flex-col"
                   >
                     {/* Encabezado de la lista */}
@@ -1105,16 +1213,22 @@ const Board: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Contenedor de tarjetas */}
-                    <div className="flex flex-col gap-3 overflow-y-auto flex-1 pr-1">
+                    {/* Contenedor de tarjetas (aplicar ref y droppableProps aquí) */}
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className="flex flex-col gap-3 overflow-y-auto flex-1 pr-1"
+                    >
                       {list.cards.map((task, index) => (
                         <Draggable
-                          key={task.id}
-                          draggableId={task.id}
+                          key={String(task.id)}
+                          draggableId={String(task.id)}
                           index={index}
                           isDragDisabled={
-                            draggingCards[task.id] &&
-                            draggingCards[task.id].user !== user?.email
+                            Boolean(
+                              draggingCards[task.id] &&
+                              draggingCards[task.id].user !== user?.email
+                            )
                           }
                         >
                           {draggableRenderer({
