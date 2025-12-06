@@ -66,7 +66,6 @@ const BoardsSidebar: React.FC = () => {
   );
   const WORKSPACE_ID = selectedWorkspace?.id;
 
-  // --- 🔍 Fetch boards con control de concurrencia ---
   const fetchBoards = useCallback(
     async (pageNumber = 1, replace = false, search = "") => {
       if (!WORKSPACE_ID || isFetchingRef.current) return;
@@ -89,7 +88,9 @@ const BoardsSidebar: React.FC = () => {
 
         const boardsData = response?.items ?? [];
 
-        setBoards((prev) => (replace ? boardsData : mergeBoards(prev, boardsData)));
+        setBoards((prev) =>
+          replace ? boardsData : mergeBoards(prev, boardsData)
+        );
 
         setHasMore(boardsData.length === LIMIT);
       } catch (err) {
@@ -105,14 +106,12 @@ const BoardsSidebar: React.FC = () => {
     [WORKSPACE_ID]
   );
 
-  // --- Carga inicial y búsqueda ---
   useEffect(() => {
     setInitialLoadDone(false);
     setBoards([]);
     fetchBoards(1, true, searchTerm);
   }, [fetchBoards, searchTerm]);
 
-  // --- Scroll infinito ---
   useEffect(() => {
     const sentinel = loadMoreRef.current;
     const rootEl = scrollContainerRef.current;
@@ -140,7 +139,6 @@ const BoardsSidebar: React.FC = () => {
     return () => observer.current?.disconnect();
   }, [boards, hasMore, loading, fetchBoards, searchTerm]);
 
-  // --- Manejadores de búsqueda automáticos (con debounce) ---
   const handleSearchChange = (value: string) => {
     setTempSearchTerm(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -182,7 +180,6 @@ const BoardsSidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* 🧩 Lista de tableros */}
       <div
         ref={scrollContainerRef}
         className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 scrollbar-hide"
@@ -197,14 +194,12 @@ const BoardsSidebar: React.FC = () => {
           />
         ))}
 
-        {/* 🔄 Cargando */}
         {loading && (
           <p className="text-sm text-text-secondary text-center animate-pulse">
             Cargando tableros...
           </p>
         )}
 
-        {/* 🚫 Sin resultados (solo si ya terminó la búsqueda) */}
         {!loading && initialLoadDone && boards.length === 0 && (
           <p className="text-sm text-text-secondary text-center mt-4">
             No se encontraron tableros.
